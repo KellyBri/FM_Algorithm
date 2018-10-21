@@ -40,8 +40,8 @@ void NET::updateCut(){
 void NET::print(){
     std::cout << "ID: " << this->ID << "\tCut: " << getIsCut() << std::endl;
     std::cout << "Disrtibution: (" << this->distribution[0] <<", " << this->distribution[1] << ")" << std::endl;
-    std::cout <<"Cells: ";
-    for(std::set<int>::iterator it = this->cells.begin(); it!=this->cells.end(); ++it)
-        std::cout << *it << "\t";
+    // std::cout <<"Cells: ";
+    // for(std::set<int>::iterator it = this->cells.begin(); it!=this->cells.end(); ++it)
+    //     std::cout << *it << "\t";
     std::cout<<std::endl;
 }
