@@ -22,7 +22,7 @@ void BuildBucklist(vector<CELL*> &, CELL**&, CELL**&);
 void InitCut(vector<CELL*> &, vector<NET*> &);
 void InitGain(vector<CELL*> &, vector<NET*> &);
 void UpdateCut(bool &, CELL*&, vector<CELL*> &, vector<NET*> &);
-void UpdateGain(vector<CELL*> &, vector<NET*> &);
+void UpdateGain(bool &, CELL*&, vector<CELL*> &, vector<NET*> &);
 CELL* FindMaxGain(CELL**&, CELL**&);
 
 
@@ -109,20 +109,21 @@ void FMAlgorithm(vector<CELL*> &cells, vector<NET*> &nets, CELL**&BucketlistA, C
     
     InitCut(cells, nets);
     InitGain(cells, nets);
-    BuildBucklist(cells, BucketlistA, BucketlistB);
+    
     bool F, T;
-    vector<int> moveList;
+    vector<int> moveList, gainList;
     //for(int i=0; i<TOTALCELLNUM; ++i){
+        BuildBucklist(cells, BucketlistA, BucketlistB);
         //add the cell with maximal gain to movelist
         CELL *moveCell = FindMaxGain(BucketlistA, BucketlistB);
         moveCell->setLock(true);
         moveList.push_back( moveCell->getID() );
+        gainList.push_back( moveCell->getGain() );
         //set from, to set & move cell
         F = moveCell->getSet();
-        T = !F;
-        //update net status of cut
-        UpdateCut(F, moveCell, cells, nets);
-        moveCell->setSet(T);
+        //update net status of cut & cell gains
+        UpdateGain(F, moveCell, cells, nets);
+        BuildBucklist(cells, BucketlistA, BucketlistB);
         //update gains of cells connected to moved cell
 
         //
@@ -143,6 +144,8 @@ void BuildBucklist(vector<CELL*> &cells, CELL**&BucketlistA, CELL**&BucketlistB)
     for(cellsIter = cells.begin() ; cellsIter != cells.end() ; cellsIter++){
         (*cellsIter)->setNext(NULL);
         (*cellsIter)->setPre(NULL);
+        //if a cell is lock, ignore it
+        if( (*cellsIter)->getLock() ) continue;
         //set == 1(B)
         if( (*cellsIter)->getSet() ){
             CELL *&bucket = BucketlistB[ (*cellsIter)->getGain() + MAXPIN ];
@@ -191,6 +194,7 @@ void BuildBucklist(vector<CELL*> &cells, CELL**&BucketlistA, CELL**&BucketlistB)
     //         }
     //     }
     // } 
+    // cout<<endl<<endl;
 
 }
 
@@ -247,8 +251,7 @@ CELL* FindMaxGain(CELL**&BucketlistA, CELL**&BucketlistB){
 void UpdateCut(bool &F, CELL* &moveCell, vector<CELL*> &cells, vector<NET*> &nets){
     bool T = !F;
     //all of nets connected to moved cell
-    vector<int>::iterator netID = moveCell->getNet().begin();
-    for(netID; netID != moveCell->getNet().end(); ++netID){
+    for(vector<int>::iterator netID = moveCell->getNet().begin(); netID != moveCell->getNet().end(); ++netID){
         //find net in nets
         NET *tempNet = new NET( (*netID) );
         vector<NET*>::iterator netIndex = lower_bound(nets.begin(), nets.end(), tempNet, compare<NET>);
@@ -258,5 +261,86 @@ void UpdateCut(bool &F, CELL* &moveCell, vector<CELL*> &cells, vector<NET*> &net
         (*netIndex)->setDistribution(F, FNum);
         (*netIndex)->setDistribution(T, TNum);
         (*netIndex)->updateCut();
+    }
+    cout<<endl;
+}
+
+void UpdateGain(bool &F, CELL* &moveCell, vector<CELL*> &cells, vector<NET*> &nets){
+    bool T = !F;
+    
+    //check critical nets before move
+    //all of nets connected to moved cell
+    for(vector<int>::iterator netID = moveCell->getNet().begin(); netID != moveCell->getNet().end(); ++netID){
+        //find net in nets
+        NET *tempNet = new NET( (*netID) );
+        vector<NET*>::iterator netIndex = lower_bound(nets.begin(), nets.end(), tempNet, compare<NET>);
+        set<int> cellInNet = (*netIndex)->getCells();
+
+        int TNum = (*netIndex)->getDistribution(T);
+        if(TNum == 0){
+            CELL *cell = new CELL;
+            for(set<int>::iterator cellID = cellInNet.begin() ; cellID != cellInNet.end(); ++cellID){
+                //find the cell 
+                cell->setID( (*cellID) );
+                vector<CELL*>::iterator cellIndex = lower_bound(cells.begin(), cells.end(), cell, compare<CELL>);
+                //update gain for all free cells in this net
+                if( !(*cellIndex)->getLock() ){
+                    int gain = (*cellIndex)->getGain() + 1;
+                    (*cellIndex)->setGain(gain);
+                }
+            }
+        }else if(TNum == 1){
+            CELL *cell = new CELL;
+            for(set<int>::iterator cellID = cellInNet.begin() ; cellID != cellInNet.end(); ++cellID){
+                //find the cell 
+                cell->setID( (*cellID) );
+                vector<CELL*>::iterator cellIndex = lower_bound(cells.begin(), cells.end(), cell, compare<CELL>);
+                //update gain for all free cells in set T in this net
+                if( !(*cellIndex)->getLock() &&  (*cellIndex)->getSet()==T ){
+                    int gain = (*cellIndex) ->getGain();
+                    --gain;
+                    (*cellIndex)->setGain(gain);
+                }
+            }
+        }
+    }
+
+    //change F(n), T(n) to reflect the move
+    UpdateCut(F, moveCell, cells, nets);
+
+    //check critical nets after move
+    //all of nets connected to moved cell
+    for(vector<int>::iterator netID = moveCell->getNet().begin(); netID != moveCell->getNet().end(); ++netID){
+        //find net in nets
+        NET *tempNet = new NET( (*netID) );
+        vector<NET*>::iterator netIndex = lower_bound(nets.begin(), nets.end(), tempNet, compare<NET>);
+        set<int> cellInNet = (*netIndex)->getCells();
+
+        int FNum = (*netIndex)->getDistribution(F);
+        if(FNum == 0){
+            CELL *cell = new CELL;
+            for(set<int>::iterator cellID = cellInNet.begin(); cellID != cellInNet.end(); ++cellID){
+                //find the cell 
+                cell->setID( (*cellID) );
+                vector<CELL*>::iterator cellIndex = lower_bound(cells.begin(), cells.end(), cell, compare<CELL>);
+                //update gain for all free cells in this net
+                if( !(*cellIndex)->getLock() ){
+                    int gain = (*cellIndex)->getGain() - 1;
+                    (*cellIndex)->setGain(gain);
+                }
+            }
+        }else if(FNum == 1){
+            CELL *cell = new CELL;
+            for(set<int>::iterator cellID = cellInNet.begin() ; cellID != cellInNet.end(); ++cellID){
+                //find the cell 
+                cell->setID( (*cellID) );
+                vector<CELL*>::iterator cellIndex = lower_bound(cells.begin(), cells.end(), cell, compare<CELL>);
+                //update gain for all free cells in set F in this net
+                if( !(*cellIndex)->getLock() &&  (*cellIndex)->getSet()==F ){
+                    int gain = (*cellIndex)->getGain() + 1;
+                    (*cellIndex)->setGain(gain);
+                }
+            }
+        }
     }
 }
