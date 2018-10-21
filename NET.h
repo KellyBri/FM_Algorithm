@@ -1,6 +1,6 @@
 #ifndef NET_H
 #define NET_H
-#include <set>
+#include <vector>
 
 class NET{
 public:
@@ -14,7 +14,7 @@ public:
     int getSize();
     int getDistribution(bool);
     bool getIsCut();
-    std::set<int> getCells();
+    std::vector<int> getCells();
 
     
     void addCell(int);
@@ -25,7 +25,7 @@ private:
     int ID;
     bool isCut;
     int distribution[2];
-    std::set<int> cells;
+    std::vector<int> cells;
 };
 
 #endif
