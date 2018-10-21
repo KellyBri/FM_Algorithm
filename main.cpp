@@ -7,6 +7,7 @@
 #include "NET.h"
 using namespace std;
 int TOTALSIZE = 0;
+int TOTALCELLNUM = 0;
 int CONSTRAINT;
 int MAXPIN = 0;
 
@@ -20,6 +21,7 @@ void BuildBucklist(vector<CELL*> &, CELL**&, CELL**&);
 void UpdateCut(vector<CELL*> &, vector<NET*> &);
 void InitGain(vector<CELL*> &, vector<NET*> &);
 void UpdateGain(vector<CELL*> &, vector<NET*> &);
+CELL* FindMaxGain(CELL**&, CELL**&);
 
 
 int main(int argc, char const *argv[]){
@@ -36,6 +38,7 @@ int main(int argc, char const *argv[]){
     while(file>>c){
         file >> cid >> csize;
         TOTALSIZE += csize;
+        ++TOTALCELLNUM;
         CELL* cell = new CELL(cid, csize);
         cells.push_back( cell );
     }
@@ -56,7 +59,7 @@ int main(int argc, char const *argv[]){
             net->addCell(cid);
             //find cell in cell vector by cell id (binary search), and add net id into cell
             cell->setID(cid);
-            cellsIter = std::lower_bound(cells.begin(), cells.end(), cell, compare<CELL>);
+            cellsIter = lower_bound(cells.begin(), cells.end(), cell, compare<CELL>);
             (*cellsIter)->addNet(nid);
             file >> c;
         }
@@ -96,20 +99,24 @@ int main(int argc, char const *argv[]){
     CELL **BucketlistA = new CELL *[2 * MAXPIN + 1];
     CELL **BucketlistB = new CELL *[2 * MAXPIN + 1];
 
-   FMAlgorithm(cells, nets, BucketlistA, BucketlistB);
+    FMAlgorithm(cells, nets, BucketlistA, BucketlistB);
 
     return 0;
 }
 void FMAlgorithm(vector<CELL*> &cells, vector<NET*> &nets, CELL**&BucketlistA, CELL**&BucketlistB){
-    bool F = 0, T = 1, turn = F;
+    bool F, T;
     UpdateCut(cells, nets);
     InitGain(cells, nets);
     BuildBucklist(cells, BucketlistA, BucketlistB);
+    vector<int> moveList;
+    for(int i=0; i<TOTALCELLNUM; ++i){
+        CELL *moveCell = FindMaxGain(BucketlistA, BucketlistB);
+        moveCell->setLock(true);
+        moveList.push_back( moveCell->getID() );
+    }
 }
 
 void BuildBucklist(vector<CELL*> &cells, CELL**&BucketlistA, CELL**&BucketlistB){
-    
-    
     
     /* Rebuild bucketlist */
     //clean bucketlist
@@ -126,22 +133,26 @@ void BuildBucklist(vector<CELL*> &cells, CELL**&BucketlistA, CELL**&BucketlistB)
         //set == 1(B)
         if( (*cellsIter)->getSet() ){
             CELL *&bucket = BucketlistB[ (*cellsIter)->getGain() + MAXPIN ];
-            if( bucket == NULL ){
-                bucket = (*cellsIter);
-            }else{
-                bucket->setPre( (*cellsIter) );
-                (*cellsIter)->setNext(bucket);
-                bucket = (*cellsIter);
+            if( !(*cellsIter)->getLock() ){
+                if( bucket == NULL ){
+                    bucket = (*cellsIter);
+                }else{
+                    bucket->setPre( (*cellsIter) );
+                    (*cellsIter)->setNext(bucket);
+                    bucket = (*cellsIter);
+                }
             }
         //set == 0(A)
         }else{
             CELL *&bucket = BucketlistA[ (*cellsIter)->getGain() + MAXPIN ];
-            if( bucket == NULL ){
-                bucket = (*cellsIter);
-            }else{
-                bucket->setPre( (*cellsIter) );
-                (*cellsIter)->setNext(bucket);
-                bucket = (*cellsIter);
+            if( !(*cellsIter)->getLock() ){
+                if( bucket == NULL ){
+                    bucket = (*cellsIter);
+                }else{
+                    bucket->setPre( (*cellsIter) );
+                    (*cellsIter)->setNext(bucket);
+                    bucket = (*cellsIter);
+                }
             }
         }
     }
@@ -172,26 +183,29 @@ void BuildBucklist(vector<CELL*> &cells, CELL**&BucketlistA, CELL**&BucketlistB)
 
 /* update nets are cut or not & find distibution of each net*/
 void UpdateCut(vector<CELL*> &cells, vector<NET*> &nets){
-    vector<CELL*>::iterator cellsIter;
     vector<NET*>::iterator netsIter;
 
     for(netsIter = nets.begin() ; netsIter != nets.end() ; ++netsIter){
         bool flag = false;
         (*netsIter)->setIsCut(false);
 
-        vector<int>::iterator firstCellID = (*netsIter)->getCells().begin();
-        bool set = cells[(*firstCellID)-1]->getSet();
-        
+        vector<int>::iterator cellID = (*netsIter)->getCells().begin();
+        CELL *cell = new CELL( (*cellID), 0);
+        vector<CELL*>::iterator cellIndex = lower_bound(cells.begin(), cells.end(), cell, compare<CELL>);
+        bool set = (*cellIndex)->getSet();
         int cellInB = 0; //set=1 -> B
-        for(vector<int>::iterator cellNum=(*netsIter)->getCells().begin() ; cellNum!=(*netsIter)->getCells().end() ; ++cellNum){
-            //count the number of cell in set B
-            if( cells[ (*cellNum) - 1] -> getSet() ) cellInB ++;
+        for(cellID ; cellID!=(*netsIter)->getCells().end() ; ++cellID){
+            //find the cell & count the number of cell in set B
+            cell->setID( (*cellID) );
+            cellIndex = lower_bound(cells.begin(), cells.end(), cell, compare<CELL>);
+            if( (*cellIndex) -> getSet() ) cellInB ++;
             //check if the net is cut
-            if( !flag && cells[ (*cellNum) - 1] -> getSet()  != set ){
+            if( !flag && (*cellIndex) -> getSet()  != set ){
                 (*netsIter)->setIsCut(true);
                 flag = true;
             }
         }
+        delete cell;
         int total = (*netsIter)->getSize();
         (*netsIter)->setDistribution( total - cellInB, cellInB);
     }
@@ -211,5 +225,13 @@ void InitGain(vector<CELL*> &cells, vector<NET*> &nets){
             if( nets[ (*netsID) - 1]->getDistribution(T) == 0 ) gain--;
         }
         (*cellsIter)->setGain(gain);
+    }
+}
+
+CELL* FindMaxGain(CELL**&BucketlistA, CELL**&BucketlistB){
+    for(int i = 2*MAXPIN; i>=0; --i){
+        if( (BucketlistA[i] != NULL) && (BucketlistB[i] != NULL) ) return BucketlistA[i];
+        else if( (BucketlistA[i] != NULL) && (BucketlistB[i] == NULL) ) return BucketlistA[i];
+        else if( (BucketlistA[i] == NULL) && (BucketlistB[i] != NULL) ) return BucketlistB[i];
     }
 }
