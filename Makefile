@@ -1,4 +1,4 @@
-CPP = g++
+CPP = g++ -std=c++11
 CPPFLAGS = -Wall
 HERDERS = CELL.h NET.h
 SOURCES = main.cpp CELL.cpp NET.cpp
