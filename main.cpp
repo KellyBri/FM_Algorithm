@@ -11,7 +11,7 @@ int TOTALSIZE = 0;
 int TOTALSIZE_A = 0;
 int TOTALSIZE_B = 0;
 int TOTALCELLNUM = 0;
-int CONSTRAINT;
+float CONSTRAINT;
 int MAXPIN = 0;
 
 template <class T>
@@ -28,7 +28,7 @@ void InitGain(vector<CELL*> &, vector<NET*> &);
 void UpdateCut(bool &, CELL*&, vector<CELL*> &, vector<NET*> &);
 void UpdateGain(bool &, CELL*&, vector<CELL*> &, vector<NET*> &, CELL**&, CELL**&);
 
-
+bool SelectCell(CELL*);
 CELL* FindMaxGain(CELL**&, CELL**&);
 
 void insertList(CELL *&, CELL *&);
@@ -86,13 +86,13 @@ int main(int argc, char const *argv[]){
     
 
     //get maximal pin number of all cells & initial partition by balanced size
-    CONSTRAINT = TOTALSIZE / 10;
+    CONSTRAINT = 1.0*TOTALSIZE / 10;
     TOTALSIZE_B = TOTALSIZE;
     for(auto cellsIter=cells.begin() ; cellsIter!=cells.end() ; cellsIter++){
         int t = (*cellsIter)->getPin();
         if( t > MAXPIN) MAXPIN = t;
         
-        if( abs(TOTALSIZE_A - TOTALSIZE_B) > CONSTRAINT ){
+        if( abs(TOTALSIZE_A - TOTALSIZE_B) >= CONSTRAINT ){
             (*cellsIter)->setSet(0);
             TOTALSIZE_A += (*cellsIter)->getSize();
             TOTALSIZE_B -= (*cellsIter)->getSize();
@@ -139,15 +139,17 @@ int main(int argc, char const *argv[]){
 void FMAlgorithm(vector<CELL*> &cells, vector<NET*> &nets, CELL**&BucketlistA, CELL**&BucketlistB){
     
     InitGain(cells, nets);
-    
+    BuildBucklist(cells, BucketlistA, BucketlistB);
+
     vector<int> gainList;
     vector<CELL *> moveList;
     for(int i=0; i<TOTALCELLNUM; ++i){
-        BuildBucklist(cells, BucketlistA, BucketlistB);
-
+       
         //add the cell with maximal gain to movelist
         CELL *moveCell = FindMaxGain(BucketlistA, BucketlistB);
-
+        if(moveCell == NULL) return;
+        moveCell->print();
+        cout<<endl;
         //if the movement against the balance condition, reject the movement
         int gain = moveCell->getGain();
         moveCell->setLock(true);
@@ -160,7 +162,7 @@ void FMAlgorithm(vector<CELL*> &cells, vector<NET*> &nets, CELL**&BucketlistA, C
         if(F) removeList(moveCell, BucketlistB[gain+MAXPIN]);
         else  removeList(moveCell, BucketlistA[gain+MAXPIN]);
 
-        //update gains of cells connected to moved cell
+        //update gains(bucketlist) of cells connected to moved cell
         UpdateGain(F, moveCell, cells, nets, BucketlistA, BucketlistB);    
     }
 
@@ -254,20 +256,57 @@ void InitGain(vector<CELL*> &cells, vector<NET*> &nets){
 
 CELL* FindMaxGain(CELL**&BucketlistA, CELL**&BucketlistB){
     for(int i = 2*MAXPIN; i>=0; --i){
-
         if( (BucketlistA[i] != NULL) && (BucketlistB[i] != NULL) ){
-            return BucketlistA[i];
+            if( SelectCell(BucketlistA[i]) ) return BucketlistA[i];
+            if( SelectCell(BucketlistB[i]) ) return BucketlistB[i];
 
+            CELL *temp = BucketlistA[i]->getNext();
+            while( temp != BucketlistA[i] && temp != NULL ){
+                if( SelectCell(temp) ) return temp;
+                else temp=temp->getNext();
+            }
+
+            temp = BucketlistB[i]->getNext();
+            while( temp != BucketlistB[i] && temp != NULL ){
+                if( SelectCell(temp) ) return temp;
+                else temp=temp->getNext();
+            }
         }else if( (BucketlistA[i] != NULL) && (BucketlistB[i] == NULL) ){
-            return BucketlistA[i];
-        
+            if( SelectCell(BucketlistA[i]) ) return BucketlistA[i];
+
+            CELL *temp = BucketlistA[i]->getNext();
+            while( temp != BucketlistA[i] && temp != NULL ){
+                if( SelectCell(temp) ) return temp;
+                else temp=temp->getNext();
+            }
         }else if( (BucketlistA[i] == NULL) && (BucketlistB[i] != NULL) ){
-            return BucketlistB[i];
-            
-        }else continue;
+            if( SelectCell(BucketlistB[i]) ) return BucketlistB[i];
+
+            CELL *temp = BucketlistB[i]->getNext();
+            while( temp != BucketlistB[i] && temp != NULL ){
+                if( SelectCell(temp) ) return temp;
+                else temp=temp->getNext();
+            }
+        }
     }
+    return NULL;
 }
 
+/* Decide whether the cell is going to be chosen or not */
+bool SelectCell(CELL* bucket){
+    int sizeCell = bucket->getSize();
+    int sizeA = TOTALSIZE_A;
+    int sizeB = TOTALSIZE_B;
+    if( bucket->getSet() ){
+        sizeB -= sizeCell;
+        sizeA += sizeCell;
+    }else{
+        sizeB += sizeCell;
+        sizeA -= sizeCell;
+    }
+    if( abs(sizeA - sizeB) < CONSTRAINT ) return true;
+    return false;
+}
 
 
 
