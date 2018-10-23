@@ -1,12 +1,16 @@
 #include <iostream>
 #include <fstream>
-#include <algorithm>
+#include <cstdlib>  //for abs
+#include <ctime>    //for time, difftime
+#include <algorithm> //for sort, lower_bound
 #include <vector>
 #include <set>
-#include <cstdlib>  //for abs
+
 #include "CELL.h"
 #include "NET.h"
+
 using namespace std;
+
 int TOTALSIZE = 0;
 int TOTALSIZE_A = 0;
 int TOTALSIZE_B = 0;
@@ -19,7 +23,7 @@ bool compare(T* const&one, T* const&two){
     return one->getID() < two->getID();
 }
 
-void FMAlgorithm(vector<CELL*> &, vector<NET*> &, CELL**&, CELL**&);
+bool FMAlgorithm(vector<CELL*> &, vector<NET*> &, CELL**&, CELL**&);
 void BuildBucklist(vector<CELL*> &, CELL**&, CELL**&);
 
 void InitCut(vector<CELL*> &, vector<NET*> &);
@@ -37,6 +41,10 @@ void removeList(CELL *&, CELL *&);
 
 int main(int argc, char const *argv[]){
     
+    //get total start time  
+    time_t start_time;
+    time(&start_time); 
+
     vector<CELL*> cells;
     vector<NET*> nets;
 
@@ -99,13 +107,23 @@ int main(int argc, char const *argv[]){
         }else (*cellsIter)->setSet(1);
     }
 
+
+    time_t start;
+    time(&start);
+
     //initialize bucket list
     CELL **BucketlistA = new CELL *[2 * MAXPIN + 1];
     CELL **BucketlistB = new CELL *[2 * MAXPIN + 1];
+    //FM algorithm
+    for(int i=0; i<TOTALCELLNUM; ++i){
+        InitCut(cells, nets);
+        if( FMAlgorithm(cells, nets, BucketlistA, BucketlistB) ) break;
+    }
 
-    InitCut(cells, nets);
-    FMAlgorithm(cells, nets, BucketlistA, BucketlistB);
-
+    time_t end;
+    time(&end);
+    int diff = difftime(end, start);
+    cout<<"Algo. time: "<<diff/60<<" min. "<<diff%60<<" sec."<<endl;
 
     //output
     file.open(argv[3], fstream::out);
@@ -130,31 +148,40 @@ int main(int argc, char const *argv[]){
     }
     file.close();
 
-
-
     delete[] BucketlistA;
     delete[] BucketlistB;
+    time_t end_time;
+    time(&end_time);
+    diff = difftime(end_time, start_time);
+    cout<<"Total time: "<<diff/60<<" min. "<<diff%60<<" sec."<<endl;
     return 0;
 }
-void FMAlgorithm(vector<CELL*> &cells, vector<NET*> &nets, CELL**&BucketlistA, CELL**&BucketlistB){
+bool FMAlgorithm(vector<CELL*> &cells, vector<NET*> &nets, CELL**&BucketlistA, CELL**&BucketlistB){
     
     InitGain(cells, nets);
     BuildBucklist(cells, BucketlistA, BucketlistB);
 
-    vector<int> gainList;
+    int maxPartialSum = -MAXPIN-1;
+    int currentPartialSum = 0;
+    int moveNum = -1;
     vector<CELL *> moveList;
     for(int i=0; i<TOTALCELLNUM; ++i){
        
         //add the cell with maximal gain to movelist
         CELL *moveCell = FindMaxGain(BucketlistA, BucketlistB);
-        if(moveCell == NULL) return;
-        moveCell->print();
-        cout<<endl;
+        if(moveCell == NULL) break;
+        //moveCell->print();
+        //cout<<endl;
         //if the movement against the balance condition, reject the movement
         int gain = moveCell->getGain();
         moveCell->setLock(true);
         moveList.push_back( moveCell );
-        gainList.push_back( gain );
+        //find maximal partial sum of gains
+        currentPartialSum += moveCell->getGain();
+        if(currentPartialSum > maxPartialSum){
+            maxPartialSum = currentPartialSum;
+            moveNum = i;
+        }
 
         //set from, to set & move cell
         bool F = moveCell->getSet();
@@ -165,15 +192,20 @@ void FMAlgorithm(vector<CELL*> &cells, vector<NET*> &nets, CELL**&BucketlistA, C
         //update gains(bucketlist) of cells connected to moved cell
         UpdateGain(F, moveCell, cells, nets, BucketlistA, BucketlistB);    
     }
+    if(moveNum == 0) return true; //FM has finished
+    else{
+        //move cell(s)
+        for(int i=0; i<=moveNum; ++i){
+            bool from = moveList[i]->getSet();
+            moveList[i]->setSet( !from );
+            //moveList[i]->print();
+        }    
 
-    //find maximal partial sum of gains
-
-    InitCut(cells, nets);
-
-    gainList.clear();
-    gainList.shrink_to_fit();
-    moveList.clear();
-    moveList.shrink_to_fit();
+        //clear vector
+        moveList.clear();
+        moveList.shrink_to_fit();
+        return false;
+    }
 }
 
 /* Rebuild bucketlist */
