@@ -18,22 +18,28 @@ int TOTALCELLNUM = 0;
 float CONSTRAINT;
 int MAXPIN = 0;
 
+CELL **BUCKETLIST_A, **BUCKETLIST_B;
+vector<CELL*> CELLS;
+vector<NET*> NETS;
+
+
 template <class T>
 bool compare(T* const&one, T* const&two){
     return one->getID() < two->getID();
 }
 
-bool FMAlgorithm(vector<CELL*> &, vector<NET*> &, CELL**&, CELL**&);
-void BuildBucklist(vector<CELL*> &, CELL**&, CELL**&);
+bool FMAlgorithm();
+void BuildBucklist();
 
-void InitCut(vector<CELL*> &, vector<NET*> &);
-void InitGain(vector<CELL*> &, vector<NET*> &);
+void InitCut();
+void InitGain();
 
-void UpdateCut(bool &, CELL*&, vector<CELL*> &, vector<NET*> &);
-void UpdateGain(bool &, CELL*&, vector<CELL*> &, vector<NET*> &, CELL**&, CELL**&);
+void UpdateSizeInPart();
+void UpdateCut(bool &, CELL*&);
+void UpdateGain(bool &, CELL*&);
 
 bool SelectCell(CELL*);
-CELL* FindMaxGain(CELL**&, CELL**&);
+CELL* FindMaxGain();
 
 void insertList(CELL *&, CELL *&);
 void removeList(CELL *&, CELL *&);
@@ -45,8 +51,7 @@ int main(int argc, char const *argv[]){
     time_t start_time;
     time(&start_time); 
 
-    vector<CELL*> cells;
-    vector<NET*> nets;
+    
 
     //read .cells c1 10
     fstream file(argv[1], fstream::in);
@@ -57,10 +62,10 @@ int main(int argc, char const *argv[]){
         TOTALSIZE += csize;
         ++TOTALCELLNUM;
         CELL* cell = new CELL(cid, csize);
-        cells.push_back( cell );
+        CELLS.push_back( cell );
     }
     file.close();
-    std::sort(cells.begin(), cells.end(), compare<CELL>);
+    std::sort(CELLS.begin(), CELLS.end(), compare<CELL>);
 
     //read .nets NET n1 { c1 c2 ... }
     file.open(argv[2], fstream::in);
@@ -81,22 +86,22 @@ int main(int argc, char const *argv[]){
                 net->addCell(cid);
                 //find cell in cell vector by cell id (binary search), and add net id into cell
                 cell->setID(cid);
-                auto cellsIter = lower_bound(cells.begin(), cells.end(), cell, compare<CELL>);
+                auto cellsIter = lower_bound(CELLS.begin(), CELLS.end(), cell, compare<CELL>);
                 (*cellsIter)->addNet(nid);
             }
             file >> c;
         }
-        nets.push_back( net );
+        NETS.push_back( net );
     }
     delete cell;
     file.close();
-    std::sort(nets.begin(), nets.end(), compare<NET>);
+    std::sort(NETS.begin(), NETS.end(), compare<NET>);
     
 
     //get maximal pin number of all cells & initial partition by balanced size
     CONSTRAINT = 1.0*TOTALSIZE / 10;
     TOTALSIZE_B = TOTALSIZE;
-    for(auto cellsIter=cells.begin() ; cellsIter!=cells.end() ; cellsIter++){
+    for(auto cellsIter=CELLS.begin() ; cellsIter!=CELLS.end() ; cellsIter++){
         int t = (*cellsIter)->getPin();
         if( t > MAXPIN) MAXPIN = t;
         
@@ -107,18 +112,22 @@ int main(int argc, char const *argv[]){
         }else (*cellsIter)->setSet(1);
     }
 
-
     time_t start;
     time(&start);
 
     //initialize bucket list
-    CELL **BucketlistA = new CELL *[2 * MAXPIN + 1];
-    CELL **BucketlistB = new CELL *[2 * MAXPIN + 1];
+    BUCKETLIST_A = new CELL *[2 * MAXPIN + 1];
+    BUCKETLIST_B = new CELL *[2 * MAXPIN + 1];
     //FM algorithm
-    for(int i=0; i<TOTALCELLNUM; ++i){
-        InitCut(cells, nets);
-        if( FMAlgorithm(cells, nets, BucketlistA, BucketlistB) ) break;
+    for(int i=0; i<20; ++i){
+        InitCut();
+        InitGain();
+        BuildBucklist();
+        if( FMAlgorithm() ) break;
+        //update size of each partition
+        UpdateSizeInPart();
     }
+    InitCut();
 
     time_t end;
     time(&end);
@@ -128,13 +137,13 @@ int main(int argc, char const *argv[]){
     //output
     file.open(argv[3], fstream::out);
     int cutSize = 0;
-    for(auto netsIter = nets.begin(); netsIter != nets.end(); ++netsIter ){
+    for(auto netsIter = NETS.begin(); netsIter != NETS.end(); ++netsIter ){
         (*netsIter)->updateCut();
         if( (*netsIter)->getIsCut() ) ++cutSize;
     }
     file<<"cut_size "<<cutSize<<endl;
     vector<int> cellInA, cellInB;
-    for(auto cellsIter=cells.begin() ; cellsIter!=cells.end() ; cellsIter++){
+    for(auto cellsIter=CELLS.begin() ; cellsIter!=CELLS.end() ; cellsIter++){
         if( (*cellsIter)->getSet() ) cellInB.push_back( (*cellsIter)->getID() );
         else cellInA.push_back( (*cellsIter)->getID() );
     }
@@ -148,30 +157,25 @@ int main(int argc, char const *argv[]){
     }
     file.close();
 
-    delete[] BucketlistA;
-    delete[] BucketlistB;
+    delete[] BUCKETLIST_A;
+    delete[] BUCKETLIST_B;
     time_t end_time;
     time(&end_time);
     diff = difftime(end_time, start_time);
     cout<<"Total time: "<<diff/60<<" min. "<<diff%60<<" sec."<<endl;
     return 0;
 }
-bool FMAlgorithm(vector<CELL*> &cells, vector<NET*> &nets, CELL**&BucketlistA, CELL**&BucketlistB){
+bool FMAlgorithm(){
     
-    InitGain(cells, nets);
-    BuildBucklist(cells, BucketlistA, BucketlistB);
-
     int maxPartialSum = -MAXPIN-1;
     int currentPartialSum = 0;
     int moveNum = -1;
     vector<CELL *> moveList;
     for(int i=0; i<TOTALCELLNUM; ++i){
-       
         //add the cell with maximal gain to movelist
-        CELL *moveCell = FindMaxGain(BucketlistA, BucketlistB);
+        CELL *moveCell = FindMaxGain();
         if(moveCell == NULL) break;
-        //moveCell->print();
-        //cout<<endl;
+
         //if the movement against the balance condition, reject the movement
         int gain = moveCell->getGain();
         moveCell->setLock(true);
@@ -182,68 +186,71 @@ bool FMAlgorithm(vector<CELL*> &cells, vector<NET*> &nets, CELL**&BucketlistA, C
             maxPartialSum = currentPartialSum;
             moveNum = i;
         }
-
         //set from, to set & move cell
         bool F = moveCell->getSet();
         //remove the chosen cell from bucklist
-        if(F) removeList(moveCell, BucketlistB[gain+MAXPIN]);
-        else  removeList(moveCell, BucketlistA[gain+MAXPIN]);
+        if(F) removeList(moveCell, BUCKETLIST_B[gain+MAXPIN]);
+        else  removeList(moveCell, BUCKETLIST_A[gain+MAXPIN]);
 
         //update gains(bucketlist) of cells connected to moved cell
-        UpdateGain(F, moveCell, cells, nets, BucketlistA, BucketlistB);    
+        UpdateGain(F, moveCell);
     }
-    if(moveNum == 0) return true; //FM has finished
-    else{
+
+    if(maxPartialSum > 0 && moveNum != -1){
         //move cell(s)
         for(int i=0; i<=moveNum; ++i){
             bool from = moveList[i]->getSet();
             moveList[i]->setSet( !from );
-            //moveList[i]->print();
         }    
-
         //clear vector
         moveList.clear();
         moveList.shrink_to_fit();
         return false;
     }
+    else{
+        //clear vector
+        moveList.clear();
+        moveList.shrink_to_fit();
+        return true; //FM has finished
+    }
 }
 
 /* Rebuild bucketlist */
-void BuildBucklist(vector<CELL*> &cells, CELL**&BucketlistA, CELL**&BucketlistB){
+void BuildBucklist(){
     
     //clean bucketlist
     for(int i = 0; i < 2 * MAXPIN + 1; ++i){
-        BucketlistA[i] = NULL;
-        BucketlistB[i] = NULL;
+        BUCKETLIST_A[i] = NULL;
+        BUCKETLIST_B[i] = NULL;
     } 
     
     //build
-    for(auto cellsIter = cells.begin() ; cellsIter != cells.end() ; cellsIter++){
+    for(auto cellsIter = CELLS.begin() ; cellsIter != CELLS.end() ; cellsIter++){
         (*cellsIter)->setNext(NULL);
         (*cellsIter)->setPre(NULL);
 
-        //if a cell is lock, ignore it
-        if( (*cellsIter)->getLock() ) continue;
+        //unlock cell
+        (*cellsIter)->setLock(0);
         if( (*cellsIter)->getSet() )   //set == 1(B)
-            insertList( (*cellsIter), BucketlistB[ (*cellsIter)->getGain() + MAXPIN ] );
+            insertList( (*cellsIter), BUCKETLIST_B[ (*cellsIter)->getGain() + MAXPIN ] );
         else    //set == 0(A)
-            insertList( (*cellsIter), BucketlistA[ (*cellsIter)->getGain() + MAXPIN ] );
+            insertList( (*cellsIter), BUCKETLIST_A[ (*cellsIter)->getGain() + MAXPIN ] );
     }
 }
 
 /* update nets are cut or not & find distibution of each net*/
-void InitCut(vector<CELL*> &cells, vector<NET*> &nets){
+void InitCut(){
     vector<int> cellInNet;
-    for(auto netsIter = nets.begin() ; netsIter != nets.end() ; ++netsIter){
+    for(auto netsIter = NETS.begin() ; netsIter != NETS.end() ; ++netsIter){
 
         CELL *cell = new CELL;
         int cellInB = 0; //set=1 -> B
         cellInNet = (*netsIter)->getCells();
         cellInNet.shrink_to_fit();
-        for(vector<int>::iterator cellID = cellInNet.begin() ; cellID != cellInNet.end(); ++cellID){
+        for(auto cellID = cellInNet.begin() ; cellID != cellInNet.end(); ++cellID){
             //find the cell 
             cell->setID( (*cellID) );
-            vector<CELL*>::iterator cellIndex = lower_bound(cells.begin(), cells.end(), cell, compare<CELL>);
+            auto cellIndex = lower_bound(CELLS.begin(), CELLS.end(), cell, compare<CELL>);
             //count the number of cell in set B
             if( (*cellIndex) -> getSet() ) cellInB ++;
         }
@@ -257,11 +264,12 @@ void InitCut(vector<CELL*> &cells, vector<NET*> &nets){
     }
 }
 
-void InitGain(vector<CELL*> &cells, vector<NET*> &nets){
+/* calculate gains of cells */
+void InitGain(){
 
     vector<int> net;
     bool F, T;
-    for(auto cellsIter = cells.begin(); cellsIter != cells.end(); ++cellsIter){
+    for(auto cellsIter = CELLS.begin(); cellsIter != CELLS.end(); ++cellsIter){
         F = (*cellsIter)->getSet();
         T = !F;
         int gain = 0;
@@ -269,7 +277,7 @@ void InitGain(vector<CELL*> &cells, vector<NET*> &nets){
         net.shrink_to_fit();
         for(auto netsID = net.begin(); netsID != net.end(); ++netsID){
             NET *tempNet = new NET( (*netsID) );
-            auto netIndex = lower_bound(nets.begin(), nets.end(), tempNet, compare<NET>);
+            auto netIndex = lower_bound(NETS.begin(), NETS.end(), tempNet, compare<NET>);
             if( (*netIndex)->getDistribution(F) == 1 ) gain++;
             if( (*netIndex)->getDistribution(T) == 0 ) gain--;
             delete tempNet;
@@ -286,36 +294,36 @@ void InitGain(vector<CELL*> &cells, vector<NET*> &nets){
 
 
 
-CELL* FindMaxGain(CELL**&BucketlistA, CELL**&BucketlistB){
+CELL* FindMaxGain(){
     for(int i = 2*MAXPIN; i>=0; --i){
-        if( (BucketlistA[i] != NULL) && (BucketlistB[i] != NULL) ){
-            if( SelectCell(BucketlistA[i]) ) return BucketlistA[i];
-            if( SelectCell(BucketlistB[i]) ) return BucketlistB[i];
+        if( (BUCKETLIST_A[i] != NULL) && (BUCKETLIST_B[i] != NULL) ){
+            if( SelectCell(BUCKETLIST_A[i]) ) return BUCKETLIST_A[i];
+            if( SelectCell(BUCKETLIST_B[i]) ) return BUCKETLIST_B[i];
 
-            CELL *temp = BucketlistA[i]->getNext();
-            while( temp != BucketlistA[i] && temp != NULL ){
+            CELL *temp = BUCKETLIST_A[i]->getNext();
+            while( temp != BUCKETLIST_A[i] && temp != NULL ){
                 if( SelectCell(temp) ) return temp;
                 else temp=temp->getNext();
             }
 
-            temp = BucketlistB[i]->getNext();
-            while( temp != BucketlistB[i] && temp != NULL ){
+            temp = BUCKETLIST_B[i]->getNext();
+            while( temp != BUCKETLIST_B[i] && temp != NULL ){
                 if( SelectCell(temp) ) return temp;
                 else temp=temp->getNext();
             }
-        }else if( (BucketlistA[i] != NULL) && (BucketlistB[i] == NULL) ){
-            if( SelectCell(BucketlistA[i]) ) return BucketlistA[i];
+        }else if( (BUCKETLIST_A[i] != NULL) && (BUCKETLIST_B[i] == NULL) ){
+            if( SelectCell(BUCKETLIST_A[i]) ) return BUCKETLIST_A[i];
 
-            CELL *temp = BucketlistA[i]->getNext();
-            while( temp != BucketlistA[i] && temp != NULL ){
+            CELL *temp = BUCKETLIST_A[i]->getNext();
+            while( temp != BUCKETLIST_A[i] && temp != NULL ){
                 if( SelectCell(temp) ) return temp;
                 else temp=temp->getNext();
             }
-        }else if( (BucketlistA[i] == NULL) && (BucketlistB[i] != NULL) ){
-            if( SelectCell(BucketlistB[i]) ) return BucketlistB[i];
+        }else if( (BUCKETLIST_A[i] == NULL) && (BUCKETLIST_B[i] != NULL) ){
+            if( SelectCell(BUCKETLIST_B[i]) ) return BUCKETLIST_B[i];
 
-            CELL *temp = BucketlistB[i]->getNext();
-            while( temp != BucketlistB[i] && temp != NULL ){
+            CELL *temp = BUCKETLIST_B[i]->getNext();
+            while( temp != BUCKETLIST_B[i] && temp != NULL ){
                 if( SelectCell(temp) ) return temp;
                 else temp=temp->getNext();
             }
@@ -327,17 +335,36 @@ CELL* FindMaxGain(CELL**&BucketlistA, CELL**&BucketlistB){
 /* Decide whether the cell is going to be chosen or not */
 bool SelectCell(CELL* bucket){
     int sizeCell = bucket->getSize();
-    int sizeA = TOTALSIZE_A;
-    int sizeB = TOTALSIZE_B;
     if( bucket->getSet() ){
-        sizeB -= sizeCell;
-        sizeA += sizeCell;
+        TOTALSIZE_B -= sizeCell;
+        TOTALSIZE_A += sizeCell;
     }else{
-        sizeB += sizeCell;
-        sizeA -= sizeCell;
+        TOTALSIZE_B += sizeCell;
+        TOTALSIZE_A -= sizeCell;
     }
-    if( abs(sizeA - sizeB) < CONSTRAINT ) return true;
-    return false;
+    if( abs(TOTALSIZE_A - TOTALSIZE_B) < CONSTRAINT ) return true;
+    else{
+        if( bucket->getSet() ){
+            TOTALSIZE_B += sizeCell;
+            TOTALSIZE_A -= sizeCell;
+        }else{
+            TOTALSIZE_B -= sizeCell;
+            TOTALSIZE_A += sizeCell;
+        }
+        return false;
+    }
+}
+/**/
+void UpdateSizeInPart(){
+
+    TOTALSIZE_B = TOTALSIZE;
+    TOTALSIZE_A = 0;
+    for(auto cellsIter=CELLS.begin() ; cellsIter!=CELLS.end() ; cellsIter++){
+       if( !(*cellsIter)->getSet() ){
+           TOTALSIZE_A += (*cellsIter)->getSize();
+           TOTALSIZE_B -= (*cellsIter)->getSize();
+       }
+    }
 }
 
 
@@ -345,16 +372,15 @@ bool SelectCell(CELL* bucket){
 
 
 
-
 /* update cut of nets connected with move cell */
-void UpdateCut(bool &F, CELL* &moveCell, vector<CELL*> &cells, vector<NET*> &nets){
+void UpdateCut(bool &F, CELL* &moveCell){
     bool T = !F;
     vector<int> net = moveCell->getNet();
     //all of nets connected to moved cell
     for(auto netID = net.begin(); netID != net.end(); ++netID){
         //find net in nets
         NET *tempNet = new NET( (*netID) );
-        auto netIndex = lower_bound(nets.begin(), nets.end(), tempNet, compare<NET>);
+        auto netIndex = lower_bound(NETS.begin(), NETS.end(), tempNet, compare<NET>);
         //update distribution of net
         int FNum = (*netIndex)->getDistribution(F) - 1;
         int TNum = (*netIndex)->getDistribution(T) + 1;
@@ -366,7 +392,8 @@ void UpdateCut(bool &F, CELL* &moveCell, vector<CELL*> &cells, vector<NET*> &net
     net.shrink_to_fit();
 }
 
-void UpdateGain(bool &F, CELL* &moveCell, vector<CELL*> &cells, vector<NET*> &nets, CELL**&BucketlistA, CELL**&BucketlistB){
+/* update gains of cells connected with the moving cell */
+void UpdateGain(bool &F, CELL* &moveCell){
     vector<int> net = moveCell->getNet();
     vector<int> cellInNet;
     CELL *cell = new CELL;
@@ -376,7 +403,7 @@ void UpdateGain(bool &F, CELL* &moveCell, vector<CELL*> &cells, vector<NET*> &ne
     for(auto netID = net.begin(); netID != net.end(); ++netID){
         //find net in nets
         NET *tempNet = new NET( (*netID) );
-        auto netIndex = lower_bound(nets.begin(), nets.end(), tempNet, compare<NET>);
+        auto netIndex = lower_bound(NETS.begin(), NETS.end(), tempNet, compare<NET>);
 
         int TNum = (*netIndex)->getDistribution(!F);  
         if(TNum == 0){
@@ -385,7 +412,7 @@ void UpdateGain(bool &F, CELL* &moveCell, vector<CELL*> &cells, vector<NET*> &ne
             for(auto cellID = cellInNet.begin() ; cellID != cellInNet.end(); ++cellID){
                 //find the cell 
                 cell->setID( (*cellID) );
-                auto cellIndex = lower_bound(cells.begin(), cells.end(), cell, compare<CELL>);
+                auto cellIndex = lower_bound(CELLS.begin(), CELLS.end(), cell, compare<CELL>);
                 //if cell is lock, ignore it
                 if( (*cellIndex)->getLock() ) continue;
                 //update gain
@@ -394,11 +421,11 @@ void UpdateGain(bool &F, CELL* &moveCell, vector<CELL*> &cells, vector<NET*> &ne
                 gain += MAXPIN;
                 //update bucketlist (cell in B else A)
                 if( (*cellIndex)->getSet() ){
-                    removeList( (*cellIndex), BucketlistB[ gain ]);
-                    insertList( (*cellIndex), BucketlistB[ gain + 1 ]);
+                    removeList( (*cellIndex), BUCKETLIST_B[ gain ]);
+                    insertList( (*cellIndex), BUCKETLIST_B[ gain + 1 ]);
                 }else{
-                    removeList( (*cellIndex), BucketlistA[ gain ]);
-                    insertList( (*cellIndex), BucketlistA[ gain + 1 ]);
+                    removeList( (*cellIndex), BUCKETLIST_A[ gain ]);
+                    insertList( (*cellIndex), BUCKETLIST_A[ gain + 1 ]);
                 }
             }
         }else if(TNum == 1){
@@ -407,7 +434,7 @@ void UpdateGain(bool &F, CELL* &moveCell, vector<CELL*> &cells, vector<NET*> &ne
             for(auto cellID = cellInNet.begin() ; cellID != cellInNet.end(); ++cellID){
                 //find the cell 
                 cell->setID( (*cellID) );
-                auto cellIndex = lower_bound(cells.begin(), cells.end(), cell, compare<CELL>);
+                auto cellIndex = lower_bound(CELLS.begin(), CELLS.end(), cell, compare<CELL>);
                 if( (*cellIndex)->getLock() || (*cellIndex)->getSet()==F ) continue;
 
                 gain = (*cellIndex)->getGain();
@@ -415,11 +442,11 @@ void UpdateGain(bool &F, CELL* &moveCell, vector<CELL*> &cells, vector<NET*> &ne
                 gain += MAXPIN;
                 //cell in B else A
                 if( (*cellIndex)->getSet() ){
-                    removeList( (*cellIndex), BucketlistB[ gain ]);
-                    insertList( (*cellIndex), BucketlistB[ gain - 1 ]);
+                    removeList( (*cellIndex), BUCKETLIST_B[ gain ]);
+                    insertList( (*cellIndex), BUCKETLIST_B[ gain - 1 ]);
                 }else{
-                    removeList( (*cellIndex), BucketlistA[ gain ]);
-                    insertList( (*cellIndex), BucketlistA[ gain - 1 ]);
+                    removeList( (*cellIndex), BUCKETLIST_A[ gain ]);
+                    insertList( (*cellIndex), BUCKETLIST_A[ gain - 1 ]);
                 }
             }
         }
@@ -428,7 +455,7 @@ void UpdateGain(bool &F, CELL* &moveCell, vector<CELL*> &cells, vector<NET*> &ne
         cellInNet.shrink_to_fit();
     }
 
-    UpdateCut(F, moveCell, cells, nets);
+    UpdateCut(F, moveCell);
 
 
     //check critical nets after move
@@ -436,7 +463,7 @@ void UpdateGain(bool &F, CELL* &moveCell, vector<CELL*> &cells, vector<NET*> &ne
     for(vector<int>::iterator netID = net.begin(); netID != net.end(); ++netID){
         //find net in nets
         NET *tempNet = new NET( (*netID) );
-        auto netIndex = lower_bound(nets.begin(), nets.end(), tempNet, compare<NET>);
+        auto netIndex = lower_bound(NETS.begin(), NETS.end(), tempNet, compare<NET>);
 
         int FNum = (*netIndex)->getDistribution(F);
         if(FNum == 0){
@@ -445,7 +472,7 @@ void UpdateGain(bool &F, CELL* &moveCell, vector<CELL*> &cells, vector<NET*> &ne
             for(auto cellID = cellInNet.begin(); cellID != cellInNet.end(); ++cellID){
                 //find the cell 
                 cell->setID( (*cellID) );
-                auto cellIndex = lower_bound(cells.begin(), cells.end(), cell, compare<CELL>);
+                auto cellIndex = lower_bound(CELLS.begin(), CELLS.end(), cell, compare<CELL>);
                 if( (*cellIndex)->getLock() ) continue;
 
                 gain = (*cellIndex)->getGain();
@@ -453,11 +480,11 @@ void UpdateGain(bool &F, CELL* &moveCell, vector<CELL*> &cells, vector<NET*> &ne
                 gain += MAXPIN;
                 //cell in B else A
                 if( (*cellIndex)->getSet() ){
-                    removeList( (*cellIndex), BucketlistB[ gain ]);
-                    insertList( (*cellIndex), BucketlistB[ gain - 1 ]);
+                    removeList( (*cellIndex), BUCKETLIST_B[ gain ]);
+                    insertList( (*cellIndex), BUCKETLIST_B[ gain - 1 ]);
                 }else{
-                    removeList( (*cellIndex), BucketlistA[ gain ]);
-                    insertList( (*cellIndex), BucketlistA[ gain - 1 ]);
+                    removeList( (*cellIndex), BUCKETLIST_A[ gain ]);
+                    insertList( (*cellIndex), BUCKETLIST_A[ gain - 1 ]);
                 }
             }
         }else if(FNum == 1){
@@ -466,7 +493,7 @@ void UpdateGain(bool &F, CELL* &moveCell, vector<CELL*> &cells, vector<NET*> &ne
             for(auto cellID = cellInNet.begin() ; cellID != cellInNet.end(); ++cellID){
                 //find the cell 
                 cell->setID( (*cellID) );
-                auto cellIndex = lower_bound(cells.begin(), cells.end(), cell, compare<CELL>);
+                auto cellIndex = lower_bound(CELLS.begin(), CELLS.end(), cell, compare<CELL>);
                 if( (*cellIndex)->getLock() ||  (*cellIndex)->getSet()!=F ) continue;
 
                 gain = (*cellIndex)->getGain();
@@ -474,11 +501,11 @@ void UpdateGain(bool &F, CELL* &moveCell, vector<CELL*> &cells, vector<NET*> &ne
                 gain += MAXPIN;
                 //cell in B else A
                 if( (*cellIndex)->getSet() ){
-                    removeList( (*cellIndex), BucketlistB[ gain ]);
-                    insertList( (*cellIndex), BucketlistB[ gain + 1 ]);
+                    removeList( (*cellIndex), BUCKETLIST_B[ gain ]);
+                    insertList( (*cellIndex), BUCKETLIST_B[ gain + 1 ]);
                 }else{
-                    removeList( (*cellIndex), BucketlistA[ gain ]);
-                    insertList( (*cellIndex), BucketlistA[ gain + 1 ]);
+                    removeList( (*cellIndex), BUCKETLIST_A[ gain ]);
+                    insertList( (*cellIndex), BUCKETLIST_A[ gain + 1 ]);
                 }
             }
         }
@@ -487,11 +514,13 @@ void UpdateGain(bool &F, CELL* &moveCell, vector<CELL*> &cells, vector<NET*> &ne
         cellInNet.shrink_to_fit();
     }
 
-    UpdateCut(F, moveCell, cells, nets);
+    UpdateCut(F, moveCell);
+    delete cell;
     net.clear();
     net.shrink_to_fit();
 }
 
+/* insert element to double linked list */
 void insertList(CELL *&cell, CELL *&bucket){
     if( bucket == NULL ){
         bucket = cell;
@@ -507,7 +536,7 @@ void insertList(CELL *&cell, CELL *&bucket){
         bucket->setNext( cell );
     }
 }
-
+/* remove element from double linked list */
 void removeList(CELL *&cell, CELL *&bucket){
     if( cell->getNext()==NULL && cell->getPre()==NULL ){
         bucket = NULL;
