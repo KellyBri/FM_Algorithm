@@ -1,0 +1,11 @@
+--How to Compile
+In this directory, enter the following command:
+$ make
+It will generate the executable file " main " in ../bin/ 
+If you want to remove it please enter the following command
+$ make clean
+
+--How to Run
+Usage: ./<exe> <cells> <nets> <output file name>
+e.g.:
+../bin/main ../testcase/p2-1.cells ../testcase/p2-1.nets p2-1.out
