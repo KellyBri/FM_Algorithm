@@ -119,6 +119,7 @@ int main(int argc, char const *argv[]){
         }else (*cellsIter)->setSet(1);
     }
     //FM algorithm
+    int lastCutSize = NETS.size();
     for(int i=0; i<100; ++i){
         InitCut();
         InitGain();
@@ -135,14 +136,18 @@ int main(int argc, char const *argv[]){
         delete[] BUCKETLIST_B;
 
         InitCut();
-        int cutSize = 0;
+        int currentCutSize = 0;
         for(auto netsIter = NETS.begin(); netsIter != NETS.end(); ++netsIter ){
             (*netsIter)->updateCut();
-            if( (*netsIter)->getIsCut() ) ++cutSize;
+            if( (*netsIter)->getIsCut() ) ++currentCutSize;
         }
-        cout<<"cut_size "<<cutSize<<"\t"<<i<<endl;
+        //cout<<"cut_size "<<currentCutSize<<"\t"<<i<<endl;
+        //if ratio of improvement is less, end
+        float improve = 1 - (1.0 * currentCutSize / lastCutSize);
+        if(improve >= 0.001) lastCutSize = currentCutSize;
+        else break;    
+        
     }
-    InitCut();
 
     time_t end;
     time(&end);
