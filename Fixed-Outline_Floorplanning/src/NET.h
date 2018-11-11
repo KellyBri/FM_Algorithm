@@ -9,13 +9,18 @@ public:
 
     void setDegree(int);
     void addNode(bool, int);
+    
+    int getTerminalSize();
+    int getTerminal(int);
+    int getBlockSize();
+    int getBlock(int);
 
     void print();
 
 private:
     int ID, degree;
-    std::vector<bool> kind; //0: terminal, 1: block
-    std::vector<int> nodeID;
+    std::vector<int> blockID;
+    std::vector<int> terminalID;
 };
 
 #endif

@@ -11,16 +11,21 @@ NET::NET(int id){
 
 void NET::setDegree(int d){ this->degree = d; }
 void NET::addNode(bool k, int id){
-    this->kind.push_back(k);
-    this->nodeID.push_back(id);
+    if(k) this->blockID.push_back(id);
+    else this->terminalID.push_back(id);
 }
+
+
+int NET::getTerminalSize(){ return this->terminalID.size(); }
+int NET::getTerminal(int i){ return this->terminalID[i]; }
+int NET::getBlockSize(){ return this->blockID.size(); }
+int NET::getBlock(int i){ return this->blockID[i]; }
 
 void NET::print(){
     std::cout << this->ID << ": ";
-    for(int i=0; i<this->degree; ++i){
-        if( this->kind[i] == PL )
-            std::cout << "p" << this->nodeID[i]<<"\t";
-        else std::cout << "sb" << this->nodeID[i]<<"\t";
-    }
+    for(auto it=this->blockID.begin(); it!=this->blockID.end(); ++it)
+        std::cout << "sb" << (*it) << "\t";
+    for(auto it=this->terminalID.begin(); it!=this->terminalID.end(); ++it)
+        std::cout << "p" << (*it) << "\t";
     std::cout<<std::endl;
 }
