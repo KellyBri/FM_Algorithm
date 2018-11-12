@@ -5,12 +5,11 @@ class BLOCK{
 public:
     BLOCK(int);
 
-    void setWidth(int);
-    void setHeight(int);
-    void setCoordinate(int, int);
-    void setPlace(bool);
+    void setWidth(const int);
+    void setHeight(const int);
+    void setCoordinate(const int, const int);
     void setParent(BLOCK *);
-    void setChild(bool, BLOCK *);   //true: l, false: r
+    void setChild(const bool, BLOCK *);   //true: l, false: r
 
     void calcArea();
     
@@ -20,17 +19,15 @@ public:
     int getArea();
     int getX();
     int getY();
-    bool getPlace();
     BLOCK *getParent();
-    BLOCK *getChild(bool);  //true: l, false: r
+    BLOCK *getChild(const bool);  //true: l, false: r
 
     void print();
 
 private:
     int ID;
     int width, height, area;
-    int x_coordinate, y_coordinate;
-    bool place;
+    int x, y;
 
     BLOCK *lchild, *rchild, *parent;
 };

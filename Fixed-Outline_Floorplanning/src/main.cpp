@@ -24,6 +24,7 @@ int TOTAL_AREA = 0;
 double WHITE_Ratio;
 int REGION_Side;
 int *Y_CONTOUR;
+int MAX_HEIGHT;
 
 std::vector<BLOCK *> BLOCKS;
 std::vector<NET *> NETS;
@@ -176,8 +177,7 @@ int main(int argc, char const **argv){
 
     WHITE_Ratio = atof(argv[4]);
     REGION_Side = sqrt( TOTAL_AREA * (1+WHITE_Ratio) );
-    std::cout<<REGION_Side;
-
+    std::cout<<"REGION_Side = "<<REGION_Side<<std::endl;
     Floorplan();
 
 
@@ -194,7 +194,7 @@ void Floorplan(){
     Y_CONTOUR = new int[REGION_Side];
 
     //Initialize B*-tree with input blocks
-    // InitialBTree();
+    InitialBTree();
     
     //Adaptive fasr Simulated Annealing
     int T = 0;  //initial temperature
@@ -210,67 +210,64 @@ void Floorplan(){
 }
 
 /* Update contour due to adding new block */
-void UpdateContour(const int &x, const int &y, const int width, const int height, int &max_y){
-
-    for(int i=x; i < x+width; ++i){
-        Y_CONTOUR[i] = y + height;
-    }
-    if( max_y < y + height) max_y = y + height;
+void UpdateContour(const int &x, int &y, const int width, const int height){
+    y = 0;
+    //find max_y in the region (x, x+width)
+    for(int i=x; i < x+width; ++i)
+        if( y < Y_CONTOUR[i] ) y = Y_CONTOUR[i];
+    //update contour
+    for(int i=x; i < x+width; ++i) Y_CONTOUR[i] = y + height ;
+    //update max_y of floorplan
+    if( MAX_HEIGHT < y + height) MAX_HEIGHT = y + height;
 }
 
 /* Initial B*-tree with input blocks */
 void InitialBTree(){
 
     int temp_x = 0, temp_y = 0;
-    int max_y = 0;
     BLOCK *leftMostBlock, *rightMostBlock, *root = NULL;
 
     //for each block in each net
-    for(auto netIt = NETS.begin(); netIt != NETS.end(); ++netIt){
-        for(int i=0; i<(*netIt)->getBlockSize(); ++i){
+    for(auto it = BLOCKS.begin(); it != BLOCKS.end(); ++it){
 
-            BLOCK *block = BLOCKS[ (*netIt)->getBlock(i) ];
-            if( block->getPlace() ) continue;
+        if(root == NULL){
 
-            if(root != NULL){
-                block->setParent(block);
-                block->setPlace(true);
-                block->setCoordinate(0, 0);
-                //update contour
-                UpdateContour( temp_x, temp_y, block->getWidth(), block->getHeight(), max_y);
+            //update contour and set coordinate of the current block
+            UpdateContour( temp_x, temp_y, (*it)->getWidth(), (*it)->getHeight() );
+            (*it)->setCoordinate(0, 0);
+            (*it)->setParent( *it );
 
-                temp_x += block->getWidth();
-                rightMostBlock = block;
-                leftMostBlock = block;
-                root = block;
+            temp_x += (*it)->getWidth();
+            rightMostBlock = *it;
+            leftMostBlock = *it;
+            root = *it;
 
-            }else if(temp_x + block->getWidth() > REGION_Side){
-                //place block to next row
-                temp_x = 0;
-                leftMostBlock->setChild(R, block);
-                block->setParent(leftMostBlock);
-                block->setPlace(true);
-                block->setCoordinate(0, temp_y);
-                //update contour
-                UpdateContour( temp_x, temp_y, block->getWidth(), block->getHeight(), max_y);
-                
-                temp_x = block->getWidth();
-                temp_y = max_y;
-                rightMostBlock = block;
-                leftMostBlock = block;
+        }else if(temp_x + (*it)->getWidth() > REGION_Side){
+            //place the block to next row
+            temp_x = 0;
+            
+            //update contour and set coordinate of the current block
+            UpdateContour( temp_x, temp_y, (*it)->getWidth(), (*it)->getHeight() );
+            (*it)->setCoordinate(0, temp_y);
+            (*it)->setParent(leftMostBlock);
+            leftMostBlock->setChild(R, *it);
 
-            }else{
-                //place block on the current row
-                rightMostBlock->setChild(L, block);
-                block->setParent(rightMostBlock);
-                block->setPlace(true);
-                block->setCoordinate(temp_x, temp_y);
-                //update contour
-                UpdateContour( temp_x, temp_y, block->getWidth(), block->getHeight(), max_y);
+            temp_x = (*it)->getWidth();
+            rightMostBlock = *it;
+            leftMostBlock = *it;
 
-                temp_x += block->getWidth();
-                rightMostBlock = block;
-            }
+        }else{
+            //place the block next to the last block on the same row
+            //update contour and set coordinate of the current block
+            UpdateContour( temp_x, temp_y, (*it)->getWidth(), (*it)->getHeight() );
+            (*it)->setCoordinate(temp_x, temp_y);
+            (*it)->setParent(rightMostBlock);
+            rightMostBlock->setChild(L, *it);
+
+            temp_x += (*it)->getWidth();
+            rightMostBlock = *it;
         }
+        
+        (*it)->print();
     }
 }
