@@ -1,12 +1,10 @@
 #ifndef BLOCK_H
 #define BLOCK_H
-#include <vector>
 
 class BLOCK{
 public:
     BLOCK(int);
 
-    void setVertexNum(int);
     void setWidth(int);
     void setHeight(int);
     void setCoordinate(int, int);
@@ -14,11 +12,9 @@ public:
     void setParent(BLOCK *);
     void setChild(bool, BLOCK *);   //true: l, false: r
 
-    void addVertex(int, int);
-    void calcWidthHeight();
+    void calcArea();
     
-
-    int getVertex();
+    int getID();
     int getWidth();
     int getHeight();
     int getArea();
@@ -32,9 +28,7 @@ public:
 
 private:
     int ID;
-    int vertex;
     int width, height, area;
-    std::vector<int> vertex_x, vertex_y;
     int x_coordinate, y_coordinate;
     bool place;
 

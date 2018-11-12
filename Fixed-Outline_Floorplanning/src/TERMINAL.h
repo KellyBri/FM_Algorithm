@@ -8,6 +8,10 @@ public:
 
     void setCoordinate(int, int);
 
+    int getID();
+    int getX();
+    int getY();
+
     void print();
 private:
     int ID;

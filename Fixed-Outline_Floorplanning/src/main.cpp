@@ -1,8 +1,9 @@
 #include <iostream>
 #include <fstream>  //for file read/write
 #include <cstdlib>  //for atof
+#include <algorithm>//for sort, lower_bound
 #include <vector>
-#include <cmath>
+#include <cmath>    //for sqrt
 
 #include "NET.h"
 #include "BLOCK.h"
@@ -22,11 +23,16 @@
 int TOTAL_AREA = 0;
 double WHITE_Ratio;
 int REGION_Side;
-int *X_CONTOUR, *Y_CONTOUR;
+int *Y_CONTOUR;
 
 std::vector<BLOCK *> BLOCKS;
 std::vector<NET *> NETS;
 std::vector<TERMINAL *> TERMINALS;
+
+template <class T>
+bool compareID(T* const&one, T* const&two){
+    return one->getID() < two->getID();
+}
 
 void Floorplan();
 void InitialBTree();
@@ -70,33 +76,48 @@ int main(int argc, char const **argv){
     
     //read BLOCKS
     for(int i=0; i<blockNum; ++i){
-        file >> c >> c; //read 's' and 'b'
-        
+
         int num;
-        file >> num;    //read sb "number"
+        file >> c >> c >> num; //read 's' and 'b', "number"
         BLOCK *temp = new BLOCK(num);
 
         file >> text >> num;   //read "hardrectilinear" and vertex "number"
-        temp->setVertexNum(num);
-        TOTAL_AREA += temp->getArea();
-
-        int x, y;
+        
+        int max_x=0, max_y=0, min_x=100000000, min_y=100000000, x, y;
         for(int j=0; j<num; ++j){
             file >> c >> x >> c >> y >> c;    //read '(', x, ',', y, ')'
-            temp->addVertex(x, y);
+
+            if(max_x < x) max_x = x;
+            else if(min_x > x) min_x = x;
+
+            if(max_y < y) max_y = y;
+            else if(min_y > y) min_y = y;
         }
-        temp->calcWidthHeight();
+        temp->setWidth(max_x - min_x);
+        temp->setHeight(max_y - min_y);
+        temp->calcArea();
+        TOTAL_AREA += temp->getArea();
         BLOCKS.push_back(temp);
     }
+    std::sort( BLOCKS.begin(), BLOCKS.end(), compareID<BLOCK> );
     // for(auto it = BLOCKS.begin(); it != BLOCKS.end(); ++it)
     //     (*it)->print();
+    file.close();
 
-    // //read terminals (p)
-    // for(int i=0; i<terminalNum; ++i){
-    //     int num;
-    //     file >> c >> num >> text;
-    //     TERMINALS.push_back( new TERMINAL(num) );
-    // }
+
+    /****************************** read .pl file *********************************/
+    file.open(argv[3], std::ifstream::in);
+    if( !file.is_open() ){
+        std::cout<<"Error: Failed to open .pl input file!\n";
+        return -1;
+    }
+    //read terminals (p)
+    for(int i=0; i<terminalNum; ++i){
+        int id, x, y;
+        file >> c >> id >> x >> y;
+        TERMINALS.push_back( new TERMINAL(id, x, y) );
+    }
+    std::sort( TERMINALS.begin(), TERMINALS.end(), compareID<TERMINAL> );
     // for(auto it = TERMINALS.begin(); it != TERMINALS.end(); ++it)
     //     (*it)->print();
     file.close();
@@ -131,10 +152,16 @@ int main(int argc, char const **argv){
             file >> c;
             if(c == 'p'){
                 file >> num;
-                temp->addNode(PL, num);
+                TERMINAL *tempTerminal = new TERMINAL(num);
+                auto it = lower_bound(TERMINALS.begin(), TERMINALS.end(), tempTerminal, compareID<TERMINAL>);
+                temp->addNode(PL, std::distance(TERMINALS.begin(), it) );
+                delete tempTerminal;
             }else{
                 file >> c >> num;
-                temp->addNode(SB, num);
+                BLOCK *tempBlock = new BLOCK(num);
+                auto it = lower_bound(BLOCKS.begin(), BLOCKS.end(), tempBlock, compareID<BLOCK>);
+                temp->addNode(SB, std::distance(BLOCKS.begin(), it) );
+                delete tempBlock;
             }
         }
         NETS.push_back(temp);
@@ -144,31 +171,16 @@ int main(int argc, char const **argv){
     file.close();
 
 
-    /****************************** read .pl file *********************************/
-    file.open(argv[3], std::ifstream::in);
-    if( !file.is_open() ){
-        std::cout<<"Error: Failed to open .pl input file!\n";
-        return -1;
-    }
-    //read terminals (p)
-    for(int i=0; i<terminalNum; ++i){
-        int id, x, y;
-        file >> c >> id >> x >> y;
-        TERMINALS.push_back( new TERMINAL(id, x, y) );
-    }
-    // for(auto it = TERMINALS.begin(); it != TERMINALS.end(); ++it)
-    //     (*it)->print();
-    file.close();
+    
 
 
     WHITE_Ratio = atof(argv[4]);
     REGION_Side = sqrt( TOTAL_AREA * (1+WHITE_Ratio) );
-    
+    std::cout<<REGION_Side;
 
     Floorplan();
 
 
-    delete[] X_CONTOUR;
     delete[] Y_CONTOUR;
     //output file
     file.open(argv[5], std::fstream::out);
@@ -179,11 +191,10 @@ int main(int argc, char const **argv){
 
 void Floorplan(){
     //Initialize contour
-    //X_CONTOUR = new int[REGION_Side];
     Y_CONTOUR = new int[REGION_Side];
 
     //Initialize B*-tree with input blocks
-    InitialBTree();
+    // InitialBTree();
     
     //Adaptive fasr Simulated Annealing
     int T = 0;  //initial temperature

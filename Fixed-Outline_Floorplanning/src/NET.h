@@ -10,6 +10,7 @@ public:
     void setDegree(int);
     void addNode(bool, int);
     
+    int getID();
     int getTerminalSize();
     int getTerminal(int);
     int getBlockSize();

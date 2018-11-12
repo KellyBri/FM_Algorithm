@@ -15,7 +15,7 @@ void NET::addNode(bool k, int id){
     else this->terminalID.push_back(id);
 }
 
-
+int NET::getID(){ return this->ID; }
 int NET::getTerminalSize(){ return this->terminalID.size(); }
 int NET::getTerminal(int i){ return this->terminalID[i]; }
 int NET::getBlockSize(){ return this->blockID.size(); }

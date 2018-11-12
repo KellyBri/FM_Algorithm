@@ -16,6 +16,10 @@ void TERMINAL::setCoordinate(int x, int y){
     this->y = y;
 }
 
+int TERMINAL::getID(){ return this->ID; }
+int TERMINAL::getX(){ return this->x; }
+int TERMINAL::getY(){ return this->y; }
+
 void TERMINAL::print(){
     std::cout << "p" << this->ID << "\t";
     std::cout << "(" << this->x << ", " << this->y << ")" << std::endl;
