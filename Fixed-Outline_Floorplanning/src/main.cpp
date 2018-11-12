@@ -11,6 +11,8 @@
 
 #define R 0
 #define L 1
+#define ROTATE 1
+#define UNROTATE 0
 
 #ifndef PL
 #define PL 0    //PL stands for TERMINAL
@@ -36,8 +38,11 @@ bool compareID(T* const&one, T* const&two){
 }
 
 void Floorplan();
-void InitialBTree();
+void ClearContour();
 int UpdateContour(BLOCK *);
+BLOCK *InitialBTree();
+void Packing(BLOCK *);
+
 
 int main(int argc, char const **argv){
     
@@ -172,12 +177,9 @@ int main(int argc, char const **argv){
     file.close();
 
 
-    
-
-
     WHITE_Ratio = atof(argv[4]);
     REGION_Side = sqrt( TOTAL_AREA * (1+WHITE_Ratio) );
-    std::cout<<"REGION_Side = "<<REGION_Side<<std::endl;
+    std::cout << "REGION_Side = " << REGION_Side << std::endl;
     Floorplan();
 
 
@@ -192,21 +194,31 @@ int main(int argc, char const **argv){
 void Floorplan(){
     //Initialize contour
     Y_CONTOUR = new int[REGION_Side];
-
-    //Initialize B*-tree with input blocks
-    InitialBTree();
+    ClearContour();
     
-    //Adaptive fasr Simulated Annealing
+    //Initialize B*-tree with input blocks
+    BLOCK *root = InitialBTree();
+    
+    //Adaptive fast Simulated Annealing
     int T = 0;  //initial temperature
     while(true){
         //perturb the B*-tree
         //pack macro blocks
+        ClearContour();
+        Packing(root);
         //evaluate the B*-tree cost
         //decide if we should accept the new B*-tree
         //modify the weights in the cost function
         //update T
         break;
     }
+}
+
+/* Clear all of elements in Y_CONTOUR and MAX_HEIGHT */
+void ClearContour(){
+    for(int i=0; i<REGION_Side; ++i)
+        Y_CONTOUR[i] = 0;
+    MAX_HEIGHT = 0;
 }
 
 /* Update contour due to adding new block */
@@ -222,25 +234,24 @@ void UpdateContour(const int &x, int &y, const int width, const int height){
 }
 
 /* Initial B*-tree with input blocks */
-void InitialBTree(){
+BLOCK *InitialBTree(){
 
     int temp_x = 0, temp_y = 0;
-    BLOCK *leftMostBlock, *rightMostBlock, *root = NULL;
+    BLOCK *leftMostBlock = NULL, *rightMostBlock = NULL, *root = NULL;
 
-    //for each block in each net
+    //for each block
     for(auto it = BLOCKS.begin(); it != BLOCKS.end(); ++it){
 
         if(root == NULL){
-
             //update contour and set coordinate of the current block
             UpdateContour( temp_x, temp_y, (*it)->getWidth(), (*it)->getHeight() );
             (*it)->setCoordinate(0, 0);
             (*it)->setParent( *it );
 
             temp_x += (*it)->getWidth();
-            rightMostBlock = *it;
-            leftMostBlock = *it;
-            root = *it;
+            rightMostBlock = (*it);
+            leftMostBlock = (*it);
+            root = (*it);
 
         }else if(temp_x + (*it)->getWidth() > REGION_Side){
             //place the block to next row
@@ -253,8 +264,8 @@ void InitialBTree(){
             leftMostBlock->setChild(R, *it);
 
             temp_x = (*it)->getWidth();
-            rightMostBlock = *it;
-            leftMostBlock = *it;
+            rightMostBlock = (*it);
+            leftMostBlock = (*it);
 
         }else{
             //place the block next to the last block on the same row
@@ -265,9 +276,38 @@ void InitialBTree(){
             rightMostBlock->setChild(L, *it);
 
             temp_x += (*it)->getWidth();
-            rightMostBlock = *it;
+            rightMostBlock = (*it);
         }
-        
-        (*it)->print();
+        // (*it)->print();
+    }
+    return root;
+}
+
+/* Travel all of blocks on b* tree (pre-order) and packing the blocks */
+void Packing(BLOCK *root){
+
+    int temp_x = 0, temp_y = 0;
+    std::vector<BLOCK *> blockStack;
+    blockStack.push_back(root);
+
+    while( !blockStack.empty() ){
+
+        BLOCK *temp = blockStack.back();
+        blockStack.pop_back();
+
+        //put the block on the current row
+        UpdateContour(temp_x, temp_y, temp->getWidth(), temp->getHeight() );
+        temp->setCoordinate(temp_x, temp_y);
+        temp_x += temp->getWidth();
+
+        // temp->print();
+
+        //finish to put blocks on the current row
+        if( temp->getChild(L) == NULL ) temp_x = 0;
+
+        if( temp->getChild(R) != NULL ) 
+            blockStack.push_back( temp->getChild(R) );
+        if( temp->getChild(L) != NULL )
+            blockStack.push_back( temp->getChild(L) );   
     }
 }
