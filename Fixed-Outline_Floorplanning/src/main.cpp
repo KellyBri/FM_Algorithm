@@ -41,7 +41,10 @@ void Floorplan();
 void ClearContour();
 int UpdateContour(BLOCK *);
 BLOCK *InitialBTree();
+void Swapping(BLOCK *, BLOCK *);
+void Rotate(BLOCK *);
 void Packing(BLOCK *);
+double CalcWireLength();
 
 
 int main(int argc, char const **argv){
@@ -160,13 +163,13 @@ int main(int argc, char const **argv){
                 file >> num;
                 TERMINAL *tempTerminal = new TERMINAL(num);
                 auto it = lower_bound(TERMINALS.begin(), TERMINALS.end(), tempTerminal, compareID<TERMINAL>);
-                temp->addNode(PL, std::distance(TERMINALS.begin(), it) );
+                temp->addNode(PL, (*it)->getID() );
                 delete tempTerminal;
             }else{
                 file >> c >> num;
                 BLOCK *tempBlock = new BLOCK(num);
                 auto it = lower_bound(BLOCKS.begin(), BLOCKS.end(), tempBlock, compareID<BLOCK>);
-                temp->addNode(SB, std::distance(BLOCKS.begin(), it) );
+                temp->addNode(SB, (*it)->getID() );
                 delete tempBlock;
             }
         }
@@ -201,16 +204,23 @@ void Floorplan(){
     
     //Adaptive fast Simulated Annealing
     int T = 0;  //initial temperature
+    int i = 0;  //test
     while(true){
         //perturb the B*-tree
         //pack macro blocks
         ClearContour();
         Packing(root);
+        Swapping( BLOCKS[1], BLOCKS[2] );
+        Rotate(root);
+        std::cout << "Max height = " << MAX_HEIGHT <<std::endl;
         //evaluate the B*-tree cost
+        double wireLength = CalcWireLength();
+        std::cout << "Wire length = " << wireLength << std::endl;
         //decide if we should accept the new B*-tree
         //modify the weights in the cost function
         //update T
-        break;
+        if(i >= 1) break;
+        ++i;
     }
 }
 
@@ -240,51 +250,89 @@ BLOCK *InitialBTree(){
     BLOCK *leftMostBlock = NULL, *rightMostBlock = NULL, *root = NULL;
 
     //for each block
-    for(auto it = BLOCKS.begin(); it != BLOCKS.end(); ++it){
+    for(auto it:BLOCKS){
 
         if(root == NULL){
             //update contour and set coordinate of the current block
-            UpdateContour( temp_x, temp_y, (*it)->getWidth(), (*it)->getHeight() );
-            (*it)->setCoordinate(0, 0);
-            (*it)->setParent( *it );
+            UpdateContour( temp_x, temp_y, it->getWidth(), it->getHeight() );
+            it->setCoordinate(0, 0);
+            it->setParent( it );
 
-            temp_x += (*it)->getWidth();
-            rightMostBlock = (*it);
-            leftMostBlock = (*it);
-            root = (*it);
+            temp_x += it->getWidth();
+            rightMostBlock = it;
+            leftMostBlock = it;
+            root = it;
 
-        }else if(temp_x + (*it)->getWidth() > REGION_Side){
+        }else if(temp_x + it->getWidth() > REGION_Side){
             //place the block to next row
             temp_x = 0;
             
             //update contour and set coordinate of the current block
-            UpdateContour( temp_x, temp_y, (*it)->getWidth(), (*it)->getHeight() );
-            (*it)->setCoordinate(0, temp_y);
-            (*it)->setParent(leftMostBlock);
-            leftMostBlock->setChild(R, *it);
+            UpdateContour( temp_x, temp_y, it->getWidth(), it->getHeight() );
+            it->setCoordinate(0, temp_y);
+            it->setParent(leftMostBlock);
+            leftMostBlock->setChild(R, it);
 
-            temp_x = (*it)->getWidth();
-            rightMostBlock = (*it);
-            leftMostBlock = (*it);
+            temp_x = it->getWidth();
+            rightMostBlock = it;
+            leftMostBlock = it;
 
         }else{
             //place the block next to the last block on the same row
             //update contour and set coordinate of the current block
-            UpdateContour( temp_x, temp_y, (*it)->getWidth(), (*it)->getHeight() );
-            (*it)->setCoordinate(temp_x, temp_y);
-            (*it)->setParent(rightMostBlock);
-            rightMostBlock->setChild(L, *it);
+            UpdateContour( temp_x, temp_y, it->getWidth(), it->getHeight() );
+            it->setCoordinate(temp_x, temp_y);
+            it->setParent(rightMostBlock);
+            rightMostBlock->setChild(L, it);
 
-            temp_x += (*it)->getWidth();
-            rightMostBlock = (*it);
+            temp_x += it->getWidth();
+            rightMostBlock = it;
         }
-        // (*it)->print();
+        // it->print();
     }
     return root;
 }
 
+/* Rotate a block */
+void Rotate(BLOCK *block){
+    int width = block->getWidth();
+    int height = block->getHeight();
+    bool r = block->getRotate();
+
+    block->setWidth( height );
+    block->setHeight( width );
+    block->setRotate( !r );
+}
+
+/* Swap two blocks in b* tree */
+void Swapping(BLOCK *A, BLOCK *B){
+    //exchange parents
+    BLOCK *parent_A = A->getParent();
+    BLOCK *parent_B = B->getParent();
+    A->setParent( parent_B );
+    B->setParent( parent_A );
+    if( parent_A->getChild(L) == A ) parent_A->setChild(L, B);
+    else parent_A->setChild(R, B);
+    if( parent_B->getChild(L) == B ) parent_B->setChild(L, A);
+    else parent_B->setChild(R, A);
+
+    //exchange left child
+    BLOCK *temp = A->getChild(L);
+    A->setChild( L, B->getChild(L) );
+    B->setChild( L, temp );
+
+    //exchange right child
+    temp = A->getChild(R);
+    A->setChild( R, B->getChild(R) );
+    B->setChild( R, temp );
+}
+
+
 /* Travel all of blocks on b* tree (pre-order) and packing the blocks */
 void Packing(BLOCK *root){
+
+    //reset max height of floorplan
+    MAX_HEIGHT = 0;
 
     int temp_x = 0, temp_y = 0;
     std::vector<BLOCK *> blockStack;
@@ -311,3 +359,41 @@ void Packing(BLOCK *root){
             blockStack.push_back( temp->getChild(L) );   
     }
 }
+
+/* Using HPWL to estimate wire length of all the nets */
+double CalcWireLength(){
+    double length = 0;
+    for(const auto &net:NETS){
+        double min_x = 100000000, min_y = 100000000;
+        double max_x = 0, max_y = 0; 
+        for(int i = 0; i < net->getTerminalSize(); ++i){
+            int index = net->getTerminal(i);
+            TERMINAL temp(index);
+            auto it = lower_bound( TERMINALS.begin(), TERMINALS.end(), &temp, compareID<TERMINAL> );
+            double x = (*it)->getX();
+            double y = (*it)->getY();
+            if( x < min_x ) min_x = x;
+            if( x > max_x ) max_x = x;
+            if( y < min_y ) min_y = y;
+            if( y > max_y ) max_y = y;
+        }
+        for(int i = 0; i < net->getBlockSize(); ++i){
+            int index = net->getBlock(i);
+            BLOCK temp(index);
+            auto it = lower_bound( BLOCKS.begin(), BLOCKS.end(), &temp, compareID<BLOCK> );
+            double x = (*it)->getX() + 0.5 * (*it)->getWidth();
+            double y = (*it)->getY() + 0.5 * (*it)->getHeight();
+            if( x < min_x ) min_x = x;
+            if( x > max_x ) max_x = x;
+            if( y < min_y ) min_y = y;
+            if( y > max_y ) max_y = y;
+        }
+        
+        double parameter = max_x - min_x + max_y - min_y;
+        // std::cout << "Net " << net->getID() << "\t" << parameter << std::endl;
+        length += parameter;
+    }
+
+    return length;
+}
+
