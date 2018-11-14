@@ -1,7 +1,7 @@
 #include <iostream>
 #include <fstream>  //for file read/write
-#include <cstdlib>  //for atof
-#include <algorithm>//for sort, lower_bound
+#include <cstdlib>  //for atof, rand
+#include <algorithm>//for sort, lower_bound, min, max
 #include <vector>
 #include <cmath>    //for sqrt
 
@@ -23,10 +23,15 @@
 #endif
 
 int TOTAL_AREA = 0;
-double WHITE_Ratio;
 int REGION_Side;
 int *Y_CONTOUR;
-int MAX_HEIGHT;
+int MAX_WIDTH, MAX_HEIGHT;
+double WHITE_Ratio;
+
+double GLOBAL_MIN_COST = 100000000000;
+double LOCAL_MIN_COST = 100000000000;
+double GLOBAL_WIRE_LENGTH, LOCAL_WIRE_LENGTH;
+std::vector<BLOCK> GLOBAL_BLOCKS, LOCAL_BLOCKS;
 
 std::vector<BLOCK *> BLOCKS;
 std::vector<NET *> NETS;
@@ -37,13 +42,13 @@ bool compareID(T* const&one, T* const&two){
     return one->getID() < two->getID();
 }
 
-void Floorplan();
+void Floorplan(int &);
 void ClearContour();
-int UpdateContour(BLOCK *);
+int UpdateContour(BLOCK *&);
 BLOCK *InitialBTree();
-void Swapping(BLOCK *, BLOCK *);
+void Swapping(BLOCK *&, BLOCK *&);
 void Rotate(BLOCK *);
-void Packing(BLOCK *);
+void Packing(BLOCK *&);
 double CalcWireLength();
 
 
@@ -183,7 +188,7 @@ int main(int argc, char const **argv){
     WHITE_Ratio = atof(argv[4]);
     REGION_Side = sqrt( TOTAL_AREA * (1+WHITE_Ratio) );
     std::cout << "REGION_Side = " << REGION_Side << std::endl;
-    Floorplan();
+    Floorplan(blockNum);
 
 
     delete[] Y_CONTOUR;
@@ -194,41 +199,104 @@ int main(int argc, char const **argv){
     return 0;
 }
 
-void Floorplan(){
+void travel(BLOCK *root){
+    if( root != NULL ) root->print();
+    if( root->getChild(L) != NULL ) travel(root->getChild(L));
+    if( root->getChild(R) != NULL ) travel(root->getChild(R));
+}
+
+void Floorplan(int &blockNum){
+    double alpha, beta;
+    double last_cost, cur_cost, diff_cost, uphill_cost = 0;
+    double last_wireLength, cur_wireLength, diff_wireLength;
+    unsigned seed = (unsigned)time(NULL);
+    srand(seed);
+    
     //Initialize contour
-    Y_CONTOUR = new int[REGION_Side];
+    Y_CONTOUR = new int[ 3 * REGION_Side ];
     ClearContour();
     
     //Initialize B*-tree with input blocks
     BLOCK *root = InitialBTree();
+    //calculate wire length
+    cur_wireLength = CalcWireLength();
+    cur_cost = cur_wireLength;
+
+    std::cout << "Seed = " << seed <<std::endl;
+    std::cout << "------------------------[Initial]------------------------\n";
+    std::cout << "Max height = " << MAX_HEIGHT << "\tMax width = " << MAX_WIDTH << std::endl;
+    std::cout << "Wire length = " << cur_wireLength << "\tCost = " << cur_cost << std::endl << std::endl;
+
     
     //Adaptive fast Simulated Annealing
-    int T = 0;  //initial temperature
-    int i = 0;  //test
+    double prob_accept = 0.9999;//probability for accepting uphill solution
+    double T = 2;               //initial temperature
+    int n = 0;                  //iteration
+
+
     while(true){
-        //perturb the B*-tree
-        //pack macro blocks
+        
+        last_wireLength = cur_wireLength;
+        last_cost = cur_cost;
+
+        /* Perturb the B*-tree */
+        //randomly select 2 blocks to swap
+        bool perturbType = rand() & 1;
+        if(perturbType){
+            int a = rand() % blockNum;
+            int b = rand() % blockNum;
+            printf("---------------[Swap Blocks ID: %d and %d]---------------\n", BLOCKS[a]->getID(), BLOCKS[b]->getID());
+            Swapping( BLOCKS[a], BLOCKS[b] );
+        }else{
+            int a = rand() % blockNum;
+            printf("------------------[Rotate Block ID: %d]------------------\n", BLOCKS[a]->getID() );
+            Rotate( BLOCKS[a] );
+        }
+        // travel(root);
+
+        /* Pack macro blocks */
         ClearContour();
         Packing(root);
-        Swapping( BLOCKS[1], BLOCKS[2] );
-        Rotate(root);
-        std::cout << "Max height = " << MAX_HEIGHT <<std::endl;
-        //evaluate the B*-tree cost
-        double wireLength = CalcWireLength();
-        std::cout << "Wire length = " << wireLength << std::endl;
-        //decide if we should accept the new B*-tree
-        //modify the weights in the cost function
-        //update T
-        if(i >= 1) break;
-        ++i;
+        
+        /* Evaluate the B*-tree cost */
+        //estimate wire length
+        cur_wireLength = CalcWireLength();
+        diff_wireLength = cur_wireLength - last_wireLength;
+        //calculate cost and difference of last cost and current cost
+        cur_cost = cur_wireLength;
+        diff_cost = cur_cost - last_cost;
+
+        std::cout << "Max height = " << MAX_HEIGHT << "\tMax width = " << MAX_WIDTH << std::endl;
+        std::cout << "Wire length = " << cur_wireLength << "\tCost = " << cur_cost << std::endl;
+
+        /* Decide if we should accept the new B*-tree */
+        prob_accept = std::min(1.0, exp( (-1)*diff_cost/T) );
+        bool accept = rand()%101 < prob_accept*100;
+        if( accept ){
+
+        }
+        std::cout << "Probability = " << prob_accept << "\tAccept = " << accept << std::endl;
+        /* Modify the weights in the cost function */
+        alpha = 0;
+        beta = 0;
+
+        /* Update T */
+        if(diff_cost > 0) uphill_cost += cur_cost;
+        T *= 0.85;
+
+        std::cout<<std::endl;
+        if(n > 1) break;
+        ++n;
     }
 }
 
 /* Clear all of elements in Y_CONTOUR and MAX_HEIGHT */
 void ClearContour(){
-    for(int i=0; i<REGION_Side; ++i)
+    for(int i=0; i<3*REGION_Side; ++i)
         Y_CONTOUR[i] = 0;
+    //reset max width and height of floorplan
     MAX_HEIGHT = 0;
+    MAX_WIDTH = 0;
 }
 
 /* Update contour due to adding new block */
@@ -240,7 +308,7 @@ void UpdateContour(const int &x, int &y, const int width, const int height){
     //update contour
     for(int i=x; i < x+width; ++i) Y_CONTOUR[i] = y + height ;
     //update max_y of floorplan
-    if( MAX_HEIGHT < y + height) MAX_HEIGHT = y + height;
+    MAX_HEIGHT = std::max(MAX_HEIGHT, y+height);
 }
 
 /* Initial B*-tree with input blocks */
@@ -262,6 +330,8 @@ BLOCK *InitialBTree(){
             rightMostBlock = it;
             leftMostBlock = it;
             root = it;
+
+            MAX_WIDTH = std::max(MAX_WIDTH, temp_x);
 
         }else if(temp_x + it->getWidth() > REGION_Side){
             //place the block to next row
@@ -287,6 +357,8 @@ BLOCK *InitialBTree(){
 
             temp_x += it->getWidth();
             rightMostBlock = it;
+
+            MAX_WIDTH = std::max(MAX_WIDTH, temp_x);
         }
         // it->print();
     }
@@ -305,16 +377,40 @@ void Rotate(BLOCK *block){
 }
 
 /* Swap two blocks in b* tree */
-void Swapping(BLOCK *A, BLOCK *B){
+void Swapping(BLOCK *&A, BLOCK *&B){
+
+    if( A->getParent() == B || B->getParent() == A ) return;
+
     //exchange parents
-    BLOCK *parent_A = A->getParent();
-    BLOCK *parent_B = B->getParent();
-    A->setParent( parent_B );
-    B->setParent( parent_A );
-    if( parent_A->getChild(L) == A ) parent_A->setChild(L, B);
-    else parent_A->setChild(R, B);
-    if( parent_B->getChild(L) == B ) parent_B->setChild(L, A);
-    else parent_B->setChild(R, A);
+    if( A->getParent() == NULL || B->getParent() == NULL ){
+        BLOCK *block, *root;
+        if( A->getParent() == NULL ){
+            root = A;
+            block = B;
+        }else{
+            root = B;
+            block = A;
+        }
+
+        BLOCK *parent = block->getParent();
+        root->setParent( parent );
+        block->setParent(NULL);
+        if( parent->getChild(L) == block ) parent->setChild(L, root);
+        else parent->setChild(R, root);
+
+        root = block;
+    }else{
+        BLOCK *parent_A = A->getParent();
+        BLOCK *parent_B = B->getParent();
+        A->setParent( parent_B );
+        B->setParent( parent_A );
+
+        if( parent_A->getChild(L) == A ) parent_A->setChild(L, B);
+        else parent_A->setChild(R, B);
+        if( parent_B->getChild(L) == B ) parent_B->setChild(L, A);
+        else parent_B->setChild(R, A);
+    }
+
 
     //exchange left child
     BLOCK *temp = A->getChild(L);
@@ -329,10 +425,7 @@ void Swapping(BLOCK *A, BLOCK *B){
 
 
 /* Travel all of blocks on b* tree (pre-order) and packing the blocks */
-void Packing(BLOCK *root){
-
-    //reset max height of floorplan
-    MAX_HEIGHT = 0;
+void Packing(BLOCK *&root){
 
     int temp_x = 0, temp_y = 0;
     std::vector<BLOCK *> blockStack;
@@ -347,6 +440,8 @@ void Packing(BLOCK *root){
         UpdateContour(temp_x, temp_y, temp->getWidth(), temp->getHeight() );
         temp->setCoordinate(temp_x, temp_y);
         temp_x += temp->getWidth();
+        //update MAX_WIDTH
+        MAX_WIDTH = std::max(MAX_WIDTH, temp_x);
 
         // temp->print();
 
@@ -372,10 +467,11 @@ double CalcWireLength(){
             auto it = lower_bound( TERMINALS.begin(), TERMINALS.end(), &temp, compareID<TERMINAL> );
             double x = (*it)->getX();
             double y = (*it)->getY();
-            if( x < min_x ) min_x = x;
-            if( x > max_x ) max_x = x;
-            if( y < min_y ) min_y = y;
-            if( y > max_y ) max_y = y;
+
+            min_x = std::min(min_x, x);
+            min_y = std::min(min_y, y);
+            max_x = std::max(max_x, x);
+            max_y = std::max(max_y, y);
         }
         for(int i = 0; i < net->getBlockSize(); ++i){
             int index = net->getBlock(i);
@@ -383,10 +479,11 @@ double CalcWireLength(){
             auto it = lower_bound( BLOCKS.begin(), BLOCKS.end(), &temp, compareID<BLOCK> );
             double x = (*it)->getX() + 0.5 * (*it)->getWidth();
             double y = (*it)->getY() + 0.5 * (*it)->getHeight();
-            if( x < min_x ) min_x = x;
-            if( x > max_x ) max_x = x;
-            if( y < min_y ) min_y = y;
-            if( y > max_y ) max_y = y;
+
+            min_x = std::min(min_x, x);
+            min_y = std::min(min_y, y);
+            max_x = std::max(max_x, x);
+            max_y = std::max(max_y, y);
         }
         
         double parameter = max_x - min_x + max_y - min_y;
