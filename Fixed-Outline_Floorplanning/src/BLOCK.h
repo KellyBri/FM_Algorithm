@@ -24,6 +24,7 @@ public:
     BLOCK *getParent();
     BLOCK *getChild(const bool);  //true: l, false: r
 
+    void copy(BLOCK);
     void print();
 
 private:

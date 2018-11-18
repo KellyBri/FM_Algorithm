@@ -39,6 +39,18 @@ BLOCK *BLOCK::getChild(const bool lr){
     else return this->rchild;
 }
 
+void BLOCK::copy(BLOCK b){
+    this->ID = b.getID();
+    this->rotate = b.getRotate();
+
+    this->x = b.getX();
+    this->y = b.getY();
+
+    this->width = b.getWidth();
+    this->height = b.getHeight();
+    this->area = b.getArea();
+}
+
 void BLOCK::print(){
     std::cout << "sb" << this->ID << "\t";
     std::cout << this->width << "\t" << this->height << "\t";
@@ -46,4 +58,7 @@ void BLOCK::print(){
     std::cout << "(" << this->x << ", " << this->y << ")" << "\t";
     if(this->rotate) std::cout << "Rotated" << std::endl;
     else std::cout << "Unrotated" << std::endl;
+
+    // if(this->parent!=NULL) std::cout<<"\tParent = "<<this->parent->getID()<<std::endl;
+    // else std::cout<< std::endl;
 }
