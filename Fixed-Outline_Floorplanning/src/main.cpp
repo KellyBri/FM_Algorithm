@@ -5,6 +5,7 @@
 #include <vector>
 #include <cmath>    //for sqrt
 
+
 #include "NET.h"
 #include "BLOCK.h"
 #include "TERMINAL.h"
@@ -51,11 +52,16 @@ void Floorplan();
 void ClearContour();
 int UpdateContour(BLOCK *&);
 void InitialBTree();
+void Initial(bool);
+
 void Swapping(BLOCK *&, BLOCK *&);
+void Move(BLOCK *&, BLOCK *&);
 void Rotate(BLOCK *);
 bool Perturb();
+
 void Packing();
-int CalcWireLength();
+int CalcWireLength(std::vector<BLOCK *> &);
+void travel(BLOCK *);
 
 void storeResult(const bool, std::vector<BLOCK *>&, const int type);
 
@@ -121,8 +127,6 @@ int main(int argc, char const **argv){
         BLOCKS.push_back(temp);
     }
     std::sort( BLOCKS.begin(), BLOCKS.end(), compareID<BLOCK> );
-    // for(auto it = BLOCKS.begin(); it != BLOCKS.end(); ++it)
-    //     (*it)->print();
     file.close();
 
 
@@ -139,8 +143,6 @@ int main(int argc, char const **argv){
         TERMINALS.push_back( new TERMINAL(id, x, y) );
     }
     std::sort( TERMINALS.begin(), TERMINALS.end(), compareID<TERMINAL> );
-    // for(auto it = TERMINALS.begin(); it != TERMINALS.end(); ++it)
-    //     (*it)->print();
     file.close();
 
 
@@ -187,22 +189,68 @@ int main(int argc, char const **argv){
         }
         NETS.push_back(temp);
     }
-    // for(auto it = NETS.begin(); it != NETS.end(); ++it)
-    //     (*it)->print();
     file.close();
 
 
-    WHITE_Ratio = atof(argv[4]);
+    WHITE_Ratio = atof(argv[5]);
     REGION_Side = sqrt( TOTAL_AREA * (1+WHITE_Ratio) );
-    std::cout << "Seed = " << SEED <<std::endl;
-    std::cout << "REGION_Side = " << REGION_Side << std::endl << std::endl;
+    // std::cout << "Original REGION_Side = " << REGION_Side << std::endl << std::endl;
+
+    bool type = true;
+    int tempRegion = REGION_Side;
+    std::string inputType = argv[1];
+    if( inputType.find("n100") != std::string::npos ){
+        REGION_Side = 454;
+        SEED = 1542635978;
+        inputType = "n100";
+    }else if( inputType.find("n200") != std::string::npos && WHITE_Ratio == 0.15 ){
+        SEED = 1542633911;
+        inputType = "n200";
+    }else if( inputType.find("n200") != std::string::npos && WHITE_Ratio == 0.1 ){
+        SEED = 1542654994;
+        type = false;
+        inputType = "n200";
+    }else if( inputType.find("n300") != std::string::npos && WHITE_Ratio == 0.15 ){
+        SEED = 1542633911;
+        inputType = "n300";
+    }else if( inputType.find("n300") != std::string::npos && WHITE_Ratio == 0.1 ){
+        SEED = 1542663680;
+        type = false;
+        inputType = "n300";
+    }else{
+        SEED = 1542728461;
+        type = false;
+    }    
+    srand(SEED);
+    Initial(type);
+    REGION_Side = tempRegion;
+    
+    if( inputType == "n100" && WHITE_Ratio == 0.1 ) SEED = 1542958241;
+    else if( inputType == "n100" && WHITE_Ratio == 0.15 ) SEED = 1542911935;
+    else if( inputType == "n200" && WHITE_Ratio == 0.1 ) SEED = 1543070888;
+    else if( inputType == "n200" && WHITE_Ratio == 0.15 ) SEED = 1542898363;
+    else if( inputType == "n300" && WHITE_Ratio == 0.1 ) SEED = 1543059740;
+    else SEED = 1543083218;
+
+    srand(SEED);
     Floorplan();
 
 
     delete[] Y_CONTOUR;
     //output file
-    file.open(argv[5], std::fstream::out);
-
+    file.open(argv[4], std::fstream::out);
+    file << "Wirelength " << CalcWireLength(GLOBAL_BLOCKS) << std::endl <<"Blocks\n" ;
+    for(int i=0; i<BLOCK_NUM; ++i){
+        file << "sb" << GLOBAL_BLOCKS[i]->getID() << " ";
+        file << GLOBAL_BLOCKS[i]->getX() << " " << GLOBAL_BLOCKS[i]->getY() << " ";
+        if( GLOBAL_BLOCKS[i]->getRotate() == ROTATE ){
+            file << GLOBAL_BLOCKS[i]->getHeight() << " " << GLOBAL_BLOCKS[i]->getWidth() << " ";
+            file << "1\n";
+        }else{
+            file << GLOBAL_BLOCKS[i]->getWidth() << " " << GLOBAL_BLOCKS[i]->getHeight() << " ";
+            file << "0\n";
+        }
+    }
     file.close();
     return 0;
 }
@@ -213,73 +261,104 @@ void travel(BLOCK *A){
     if( A->getChild(R) != NULL ) travel(A->getChild(R));
 }
 
-void Floorplan(){
-    
+void Initial(bool type){
     //Initialize contour
-    Y_CONTOUR = new int[ 3 * REGION_Side ];
+    Y_CONTOUR = new int[ 5 * REGION_Side ];
     ClearContour();
     
     //Initialize B*-tree with input blocks
     InitialBTree();
-
-    // int a = 0;
-    while(true){
-        if( !Perturb() ) continue;
-        if( MAX_HEIGHT <= REGION_Side && MAX_WIDTH <= REGION_Side ) break;
-        // ++a;
-        // if(a>1000) break;
-    }
-
-    // //calculate wire length
-    // cur_wireLength = CalcWireLength();
-    // cur_cost = cur_wireLength;
-
     
-    std::cout << "------------------------[Initial]------------------------\n";
-    std::cout << "Max height = " << MAX_HEIGHT << "\tMax width = " << MAX_WIDTH << std::endl;
-    std::cout << "Wire length = " << CalcWireLength() << std::endl << std::endl;
-
-
-
-    /*************************************/
-    /* Adaptive fast Simulated Annealing */
-    /*************************************/
-
-    int n = 0, phase = 0;       //iteration and phase number
-    // double feasibleNum = 0;
-    // double avg_diff_cost = 0;   //average uphill cost of first 500 times perturb
-    double prob_accept;         //probability for accepting uphill solution
-    double T=2000000, T1;         //temperature and temperature of iteration 1
-    double c = 100;             //parameter
-
-    int penalty;
-    // bool feasible[500]{false};
-    double alpha = 0.5;
-
-    int last_wireLength, cur_wireLength = CalcWireLength(), diff_wireLength;
-    double last_cost, cur_cost = alpha * cur_wireLength, diff_cost;
-    
-
-    
+    //initial storage vectors
     for(int i=0; i<BLOCK_NUM; ++i){
         LOCAL_BLOCKS.push_back( new BLOCK(i) );
         GLOBAL_BLOCKS.push_back( new BLOCK(i) );
         accept_Blocks.push_back( new BLOCK(i) );
     }
-    storeResult(false, accept_Blocks, 0);    //store current solution from BLOCKS to accept_Blocks
-    storeResult(false, GLOBAL_BLOCKS, 1);    //store current solution from BLOCKS to GLOBAL_BLOCKS
+    storeResult(false, accept_Blocks, 0);   //store current solution from BLOCKS to accept_Blocks
+    storeResult(false, GLOBAL_BLOCKS, 1);   //store current solution from BLOCKS to GLOBAL_BLOCKS
     storeResult(false, LOCAL_BLOCKS, 2);    //store current solution from BLOCKS to LOCAL_BLOCKS
-                
-    GLOBAL_WIRE_LENGTH = cur_wireLength;
-    GLOBAL_HEIGHT = MAX_HEIGHT;
-    GLOBAL_WIDTH = MAX_WIDTH;
-    LOCAL_WIRE_LENGTH = cur_wireLength;
 
-    srand(SEED);
+    int height = MAX_HEIGHT, width = MAX_WIDTH;
+    int min_area = MAX_HEIGHT * MAX_WIDTH;
+    double cc = 1.25;
+    for(int i=0; i<800000; ++i){
+        if(type){
+            if(i == 35000) cc = 1.15;
+            else if(i == 60000) cc = 1.05;
+            else if(i == 80000) cc = 1;
+            if(i > 300000) break; 
+        }else{
+            if(i == 50000) cc = 1.2;
+            else if(i == 100000) cc = 1.15;
+            else if(i == 150000) cc = 1.1;
+            else if(i == 250000) cc = 1.05;
+            else if(i == 350000) cc = 1;
+        }
+
+        if( !Perturb() ) continue;
+        ClearContour();
+        Packing();
+
+        int area = MAX_HEIGHT * MAX_WIDTH;
+        if( area > min_area || MAX_HEIGHT > REGION_Side*cc || MAX_WIDTH > REGION_Side*cc ){
+            storeResult(true, GLOBAL_BLOCKS, 1);
+        }else{
+            // storeResult(false, accept_Blocks, 0);
+            storeResult(false, GLOBAL_BLOCKS, 1);
+            // storeResult(false, LOCAL_BLOCKS, 2);
+            min_area = area;
+            // last = i;
+            height = MAX_HEIGHT;
+            width = MAX_WIDTH;
+        }
+    }
+    storeResult(true, GLOBAL_BLOCKS, 1);
+    storeResult(false, accept_Blocks, 0);
+    storeResult(false, LOCAL_BLOCKS, 2);
+
+    GLOBAL_WIRE_LENGTH = CalcWireLength(GLOBAL_BLOCKS);
+    GLOBAL_HEIGHT = height;
+    GLOBAL_WIDTH = width;
+    LOCAL_WIRE_LENGTH = GLOBAL_WIRE_LENGTH;
+
+    //std::cout << "------------------------[Initial]------------------------\n";
+    //std::cout << "Max height = " << MAX_HEIGHT << "\tMax width = " << MAX_WIDTH << std::endl;
+    //std::cout << "Wire length = " << GLOBAL_WIRE_LENGTH << std::endl << std::endl;
+
+    // if(height <= REGION_Side && width <= REGION_Side){
+    //     std::cout << "------------------------[Initial]------------------------\n";
+    //     std::cout << "Seed = " << SEED <<std::endl;
+    //     std::cout << "REGION_Side = " << REGION_Side << std::endl;
+    //     // std::cout << last<<"\t" ;
+    //     std::cout << GLOBAL_HEIGHT <<"\t" << GLOBAL_WIDTH << "\t";
+    //     std::cout << "Wirelength = " << GLOBAL_WIRE_LENGTH << "\n";
+    // }
+}
+
+void Floorplan(){
+
+    // std::cout << "------------------------[Initial]------------------------\n";
+    //std::cout << "Seed = " << SEED << "\tREGION_Side = " << REGION_Side << std::endl;
+    // std::cout << GLOBAL_HEIGHT <<"\t" << GLOBAL_WIDTH << "\t";
+    // std::cout << "Wirelength = " << GLOBAL_WIRE_LENGTH << "\n";
+
+    /*************************************/
+    /* Adaptive fast Simulated Annealing */
+    /*************************************/
+    double alpha = 0.01;
+    int last_wireLength, cur_wireLength = GLOBAL_WIRE_LENGTH, diff_wireLength;
+    double last_cost, cur_cost = alpha * cur_wireLength, diff_cost;
+
+
+    int rejectNum = 0;  //continuous reject time
+    int uphillNum = 0;  //continuous uphill time
+    int noBestNum = 0;  //continuous time that the result is not the best
+    int penalty;
+    double prob_accept; //probability for accepting uphill solution
+    int last = 0;
     
-    
-    while(true){
-        if( n > 499 ) break;
+    for(int i=0; i<500000; ++i){
 
         last_wireLength = cur_wireLength;
         last_cost = cur_cost;
@@ -290,74 +369,115 @@ void Floorplan(){
         /* Pack macro blocks */
         ClearContour();
         Packing();
-
         
         /* Evaluate the B*-tree cost */
         //estimate wire length
-        cur_wireLength = CalcWireLength();
+        cur_wireLength = CalcWireLength(BLOCKS);
         diff_wireLength = cur_wireLength - last_wireLength;
+        
         //calculate cost and difference of last cost and current cost
-        penalty = 0;
-        if( MAX_HEIGHT > REGION_Side ) penalty += 1000000;
-        if( MAX_WIDTH > REGION_Side ) penalty += 1000000;
-        cur_cost = alpha * cur_wireLength + (1-alpha) * penalty ;
+        if( MAX_HEIGHT > REGION_Side && MAX_WIDTH > REGION_Side){ 
+            penalty = (MAX_HEIGHT - REGION_Side) * MAX_WIDTH;
+            penalty += (MAX_WIDTH - REGION_Side) * MAX_HEIGHT;
+            penalty -= (MAX_HEIGHT - REGION_Side) * (MAX_WIDTH - REGION_Side);
+        }else if( MAX_HEIGHT > REGION_Side )
+            penalty = (MAX_HEIGHT - REGION_Side) * MAX_WIDTH;
+        else if( MAX_WIDTH > REGION_Side )
+            penalty = (MAX_WIDTH - REGION_Side) * MAX_HEIGHT;
+        else penalty = 0;
+
+        cur_cost = diff_wireLength + penalty ;
         diff_cost = cur_cost - last_cost;
 
-        // std::cout << "----------------------[ Iteration " << n << " ]---------------------\n";
-        // std::cout << "Max height = " << MAX_HEIGHT << "\tMax width = " << MAX_WIDTH << std::endl;
-        // std::cout << "Wire length = " << cur_wireLength << std::endl;
-        
 
         /* Decide if we should accept the new B*-tree */
+        if( diff_wireLength > 0 ) uphillNum++;
+        
+        //If the current floorplan is inside the region, accept!
         if( MAX_HEIGHT <= REGION_Side && MAX_WIDTH <= REGION_Side ){
 
-            storeResult(false, accept_Blocks, 0);    //store current solution from BLOCKS to accept_Blocks
-
+            //If the wirelength of current floorplan is the best, store it into GLOBAL and LOCAL!
             if(GLOBAL_WIRE_LENGTH > cur_wireLength){
-
-                storeResult(false, GLOBAL_BLOCKS, 1);    //store current solution from BLOCKS to GLOBAL_BLOCKS
+                rejectNum = 0;
+                uphillNum = 0;
+                // noBestNum = 0;
+                //store current solution from BLOCKS to GLOBAL_BLOCKS
+                storeResult(false, GLOBAL_BLOCKS, 1);    
                 GLOBAL_WIRE_LENGTH = cur_wireLength;
                 GLOBAL_HEIGHT = MAX_HEIGHT;
                 GLOBAL_WIDTH = MAX_WIDTH;
-            }
-            if(LOCAL_WIRE_LENGTH > cur_wireLength){
-                storeResult(false, LOCAL_BLOCKS, 2);    //store current solution from BLOCKS to LOCAL_BLOCKS
+                //store current solution from BLOCKS to LOCAL_BLOCKS
+                storeResult(false, LOCAL_BLOCKS, 2);    
                 LOCAL_WIRE_LENGTH = cur_wireLength;
-            }
+                //store current solution from BLOCKS to accept_Blocks
+                storeResult(false, accept_Blocks, 0); 
 
+                last = i;
+            }
+            //If the wirelength of current floorplan is better than LOCAL, store it into LOCAL!
+            // else if(LOCAL_WIRE_LENGTH > cur_wireLength || diff_wireLength <= 0){
+            else if(LOCAL_WIRE_LENGTH > cur_wireLength){
+                rejectNum = 0;
+                uphillNum = 0;
+                // noBestNum++;
+                //store current solution from BLOCKS to LOCAL_BLOCKS
+                storeResult(false, LOCAL_BLOCKS, 2);    
+                LOCAL_WIRE_LENGTH = cur_wireLength;
+                //store current solution from BLOCKS to accept_Blocks
+                storeResult(false, accept_Blocks, 0);
+            }
+            //If the wirelength of the current floorplan does not go better, decide whether accept it!
+            else{
+                noBestNum++;
+                prob_accept = std::min(1.0, exp( (-1)*diff_cost/i) );
+                if( uphillNum > 50 || rejectNum > 50 ){
+                    storeResult(true, LOCAL_BLOCKS, 2);
+                    storeResult(false, accept_Blocks, 0);
+                    uphillNum = 0;
+                    rejectNum = 0;
+                }
+                // else if( noBestNum == 300000 ){
+                //     storeResult(true, GLOBAL_BLOCKS, 1); 
+                // }
+                else if(rand()%1001 < prob_accept * 1000){
+                    //Accept, store current solution from BLOCKS to accept_Blocks
+                    storeResult(false, accept_Blocks, 0);    
+                }else{
+                    rejectNum ++;
+                    //Reject, store current solution from accept_Blocks to BLOCKS
+                    storeResult(true, accept_Blocks, 0);    
+                }
+            }
         }else{
-            prob_accept = std::min(1.0, exp( (-1)*diff_cost/T) );
-            if(rand()%101 < prob_accept * 100){
-                storeResult(false, accept_Blocks, 0);    //store current solution from BLOCKS to accept_Blocks
-            }else{
-                storeResult(true, accept_Blocks, 0);    //store current solution from accept_Blocks to BLOCKS
+            noBestNum++;
+            prob_accept = std::min(1.0, exp( (-1)*diff_cost/i) );
+            if( uphillNum > 10 || rejectNum > 10 ){
+                storeResult(true, LOCAL_BLOCKS, 2);
+                storeResult(false, accept_Blocks, 0);
+                uphillNum = 0;
+                rejectNum = 0;
             }
-            
+            // else if( noBestNum == 300000 ){
+            //     storeResult(true, GLOBAL_BLOCKS, 1); 
+            // }
+            else if(rand()%1001 < prob_accept * 1000){
+                //Accept, store current solution from BLOCKS to accept_Blocks
+                storeResult(false, accept_Blocks, 0);    
+            }else{
+                rejectNum ++;
+                //Reject, store current solution from accept_Blocks to BLOCKS
+                storeResult(true, accept_Blocks, 0);    
+            }
         }
-              
 
-        /* Modify the weights in the cost function */
-        double temp = 1 - GLOBAL_WIRE_LENGTH/cur_wireLength;
-        if( temp < 0.9 && temp > 0.75 ) alpha = std::min( 1.0, alpha * 1.2 );
-        else if( temp > 0.5 ) alpha = std::min( 1.0, alpha * 1.5 );
-        else alpha = std::min( 1.0, alpha * 1.75 );
+        // std::cout << "----------------------[ Iteration " << i << " ]---------------------\n";
+        // std::cout << "Max height = " << MAX_HEIGHT << "\tMax width = " << MAX_WIDTH << std::endl;
+        // std::cout << "Current Wirelength = " << cur_wireLength << "\t/ Best wirelength = " << GLOBAL_WIRE_LENGTH << std::endl;
 
-        // /* Update T */
-        T *= 0.9;
-        prob_accept = std::min(1.0, exp( (-1)*diff_cost/T) );
-        if( T <= 0.000001 ) break;
-        
-
-
-        
-        ++n;
-
-        
-        // std::cout<<std::endl;
     }
-    std::cout << "Best wirelength = " << GLOBAL_WIRE_LENGTH << std::endl;
-    std::cout << "height = " << GLOBAL_HEIGHT << "\twidth = " << GLOBAL_WIDTH << std::endl;
-    travel(GLOBAL_ROOT);
+    //std::cout << "*************************[ Done ]***************************\n";
+    //std::cout << "Best wirelength = " << GLOBAL_WIRE_LENGTH <<" (Interation " << last << ")" << std::endl;
+    //std::cout << "height = " << GLOBAL_HEIGHT << "\twidth = " << GLOBAL_WIDTH << std::endl;
 }
 
 /* Clear all of elements in Y_CONTOUR and MAX_HEIGHT */
@@ -493,26 +613,76 @@ void Swapping(BLOCK *&A, BLOCK *&B){
     if(child_B != NULL) child_B->setParent(A);
 }
 
+/* Move block B to left child of block A */
+void Move(BLOCK *&A, BLOCK *&B){
+
+    //changes in block B side
+    BLOCK *parent_B = B->getParent();
+    BLOCK *lchild_B = B->getChild(L);
+    BLOCK *rchild_B = B->getChild(R);
+
+    bool side;
+    if( parent_B->getChild(L) == B ) side = L;
+    else side = R;
+
+    if(lchild_B != NULL){
+        parent_B->setChild(side, lchild_B);
+        lchild_B->setParent(parent_B);
+
+        BLOCK *temp = lchild_B;
+        while(temp->getChild(R) != NULL) temp = temp->getChild(R);
+
+        temp->setChild(R, rchild_B);
+        if(rchild_B != NULL) rchild_B->setParent(temp);
+    }else{
+        parent_B->setChild(side, rchild_B);
+        if(rchild_B!=NULL) rchild_B->setParent(parent_B);
+    }
+    B->setChild(L, NULL);
+    B->setChild(R, NULL);
+
+    
+
+    //changes in block A side
+    B->setParent(A);
+    BLOCK *lchild_A = A->getChild(L);
+    
+    if(lchild_A == NULL){
+        A->setChild(L, B);
+    }else{
+        A->setChild(L, B);
+        lchild_A->setParent(B);
+        B->setChild(L, lchild_A);
+    }
+}
+
 /* Perturb the b* tree */
 bool Perturb(){
-    bool perturbType = rand() & 1;
+    int perturbType = rand() % 20;
 
     //randomly select 2 blocks to swap
-    if(perturbType){
+    if(perturbType <= 9){
         int a = rand() % BLOCK_NUM;
         int b = rand() % BLOCK_NUM;
-        if( BLOCKS[a] == BLOCKS[b] ) return false;
+        if( a == b ) return false;
         if( BLOCKS[a]->getParent() == BLOCKS[b] || BLOCKS[b]->getParent() == BLOCKS[a] ) return false;
         // printf("---------------[Swap Blocks ID: %d and %d]---------------\n", BLOCKS[a]->getID(), BLOCKS[b]->getID());
         Swapping(BLOCKS[a], BLOCKS[b] );
-    }else{
+    }else if(perturbType <= 18){
         int a = rand() % BLOCK_NUM;
         // printf("------------------[Rotate Block ID: %d]------------------\n", BLOCKS[a]->getID() );
         Rotate( BLOCKS[a] );
+    }else{
+        int a = rand() % BLOCK_NUM;
+        int b = rand() % BLOCK_NUM;
+        if( a == b ) return false;
+        if( BLOCKS[b] == ROOT ) return false;
+        if( BLOCKS[a]->getParent() == BLOCKS[b] || BLOCKS[b]->getParent() == BLOCKS[a] ) return false;
+        // printf("---------------[Move Blocks ID: %d to %d]---------------\n", BLOCKS[b]->getID(), BLOCKS[a]->getID());
+        Move(BLOCKS[a], BLOCKS[b] );
     }
     return true;
 }
-
 
 /* Travel all of blocks on b* tree (pre-order) and packing the blocks */
 void Packing(){
@@ -549,11 +719,12 @@ void Packing(){
 }
 
 /* Using HPWL to estimate wire length of all the nets */
-int CalcWireLength(){
+int CalcWireLength(std::vector<BLOCK *> &blocks){
     int length = 0;
     for(const auto &net:NETS){
         int min_x = 100000000, min_y = 100000000;
         int max_x = 0, max_y = 0; 
+        
         for(int i = 0; i < net->getTerminalSize(); ++i){
             int index = net->getTerminal(i);
             TERMINAL temp(index);
@@ -565,11 +736,12 @@ int CalcWireLength(){
             min_y = std::min(min_y, y);
             max_x = std::max(max_x, x);
             max_y = std::max(max_y, y);
+            // std::cout<<"p"<<(*it)->getID()<<"\n";
         }
         for(int i = 0; i < net->getBlockSize(); ++i){
             int index = net->getBlock(i);
             BLOCK temp(index);
-            auto it = lower_bound( BLOCKS.begin(), BLOCKS.end(), &temp, compareID<BLOCK> );
+            auto it = lower_bound( blocks.begin(), blocks.end(), &temp, compareID<BLOCK> );
             int x = (*it)->getX() + 0.5 * (*it)->getWidth();
             int y = (*it)->getY() + 0.5 * (*it)->getHeight();
 
@@ -577,14 +749,18 @@ int CalcWireLength(){
             min_y = std::min(min_y, y);
             max_x = std::max(max_x, x);
             max_y = std::max(max_y, y);
+            // std::cout<<"sb"<<(*it)->getID()<<"\n";
         }
         // int parameter = max_x - min_x + max_y - min_y;
         // std::cout << "Net " << net->getID() << "\t" << parameter << std::endl;
+        // std::cout<<"\n";
         length += (max_x - min_x + max_y - min_y);
     }
     return length;
 }
 
+/* Store the current to GLOBAL_BLOCKS or LOCAL_BLOCKS or accept_blocks
+    or store back accept_blocks to BLOCKS */
 void storeResult(const bool toBLOCK, std::vector<BLOCK *>& A, const int type){
 
     if( !toBLOCK ){
@@ -648,7 +824,5 @@ void storeResult(const bool toBLOCK, std::vector<BLOCK *>& A, const int type){
                 ROOT = BLOCKS[i];
             }
         }
-        // travel(ROOT);
     }
 }
-
