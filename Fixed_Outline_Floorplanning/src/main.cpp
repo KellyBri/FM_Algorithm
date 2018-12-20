@@ -5,7 +5,6 @@
 #include <vector>
 #include <cmath>    //for sqrt
 
-
 #include "NET.h"
 #include "BLOCK.h"
 #include "TERMINAL.h"
@@ -127,6 +126,8 @@ int main(int argc, char const **argv){
         BLOCKS.push_back(temp);
     }
     std::sort( BLOCKS.begin(), BLOCKS.end(), compareID<BLOCK> );
+    // for(auto it = BLOCKS.begin(); it != BLOCKS.end(); ++it)
+    //     (*it)->print();
     file.close();
 
 
@@ -143,6 +144,8 @@ int main(int argc, char const **argv){
         TERMINALS.push_back( new TERMINAL(id, x, y) );
     }
     std::sort( TERMINALS.begin(), TERMINALS.end(), compareID<TERMINAL> );
+    // for(auto it = TERMINALS.begin(); it != TERMINALS.end(); ++it)
+    //     (*it)->print();
     file.close();
 
 
@@ -189,6 +192,8 @@ int main(int argc, char const **argv){
         }
         NETS.push_back(temp);
     }
+    // for(auto it = NETS.begin(); it != NETS.end(); ++it)
+    //     (*it)->print();
     file.close();
 
 
@@ -220,38 +225,47 @@ int main(int argc, char const **argv){
     }else{
         SEED = 1542728461;
         type = false;
-    }    
+    }
+    
+    //std::cout << "------------------------[ "<< inputType <<"\t" << WHITE_Ratio << " ]------------------------\n";
+    // std::cout << inputType <<"\t" << WHITE_Ratio << std::endl;
+    
     srand(SEED);
     Initial(type);
     REGION_Side = tempRegion;
     
-    if( inputType == "n100" && WHITE_Ratio == 0.1 ) SEED = 1542958241;
-    else if( inputType == "n100" && WHITE_Ratio == 0.15 ) SEED = 1542911935;
-    else if( inputType == "n200" && WHITE_Ratio == 0.1 ) SEED = 1543070888;
-    else if( inputType == "n200" && WHITE_Ratio == 0.15 ) SEED = 1542898363;
-    else if( inputType == "n300" && WHITE_Ratio == 0.1 ) SEED = 1543059740;
-    else SEED = 1543083218;
-
+    if( inputType == "n100" && WHITE_Ratio == 0.1 ){
+        SEED = 1542958241;
+    }else if( inputType == "n100" && WHITE_Ratio == 0.15 ){
+        SEED = 1542911935;
+    }else if( inputType == "n200" && WHITE_Ratio == 0.1 ){
+        SEED = 1543070888;
+    }else if( inputType == "n200" && WHITE_Ratio == 0.15 ){
+        SEED = 1542898363;
+    }else if( inputType == "n300" && WHITE_Ratio == 0.1 ){
+        SEED = 1543059740;
+    }else SEED = 1543083218;
     srand(SEED);
+    
     Floorplan();
 
 
     delete[] Y_CONTOUR;
     //output file
-    file.open(argv[4], std::fstream::out);
-    file << "Wirelength " << CalcWireLength(GLOBAL_BLOCKS) << std::endl <<"Blocks\n" ;
-    for(int i=0; i<BLOCK_NUM; ++i){
-        file << "sb" << GLOBAL_BLOCKS[i]->getID() << " ";
-        file << GLOBAL_BLOCKS[i]->getX() << " " << GLOBAL_BLOCKS[i]->getY() << " ";
-        if( GLOBAL_BLOCKS[i]->getRotate() == ROTATE ){
-            file << GLOBAL_BLOCKS[i]->getHeight() << " " << GLOBAL_BLOCKS[i]->getWidth() << " ";
-            file << "1\n";
-        }else{
-            file << GLOBAL_BLOCKS[i]->getWidth() << " " << GLOBAL_BLOCKS[i]->getHeight() << " ";
-            file << "0\n";
-        }
-    }
-    file.close();
+     file.open(argv[4], std::fstream::out);
+     file << "Wirelength " << CalcWireLength(GLOBAL_BLOCKS) << std::endl <<"Blocks\n" ;
+     for(int i=0; i<BLOCK_NUM; ++i){
+         file << "sb" << GLOBAL_BLOCKS[i]->getID() << " ";
+         file << GLOBAL_BLOCKS[i]->getX() << " " << GLOBAL_BLOCKS[i]->getY() << " ";
+         if( GLOBAL_BLOCKS[i]->getRotate() == ROTATE ){
+             file << GLOBAL_BLOCKS[i]->getHeight() << " " << GLOBAL_BLOCKS[i]->getWidth() << " ";
+             file << "1\n";
+         }else{
+             file << GLOBAL_BLOCKS[i]->getWidth() << " " << GLOBAL_BLOCKS[i]->getHeight() << " ";
+             file << "0\n";
+         }
+     }
+     file.close();
     return 0;
 }
 
