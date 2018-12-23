@@ -20,7 +20,7 @@ public:
     unsigned dimension() {return _noi.dimension();}
     double objective() {return _f;}
     double x(unsigned i) {return _x[i];}
-
+    
 private:
     // parameter
     unsigned _numIteration;

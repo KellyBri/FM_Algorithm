@@ -29,44 +29,41 @@ void GlobalPlacer::place()
 
     vector<double> coordinate(_placement.numModules() * 2); // solution vector, size: num_blocks*2 
                                                             // each 2 variables represent the X and Y dimensions of a block
-	// Initial placement
-	// An example of random placement by TA. If you want to use it, please uncomment the folllwing 2 lines.
-	srand(time(NULL));
+	srand(0);
 	randomPlace(coordinate);
-    
-	
-	/* @@@ TODO 
-	 * v1. Understand above example and modify ExampleFunction.cpp to implement the analytical placement
-	 * v2. You can choose LSE or WA as the wirelength model, the former is easier to calculate the gradient
-     *  3. For the bin density model, you could refer to the lecture notes
-     *  4. You should first calculate the form of wirelength model and bin density model and the forms of their gradients ON YOUR OWN 
-	 *  5. Replace the value of f in evaluateF() by the form like "f = alpha*WL() + beta*BinDensity()"
-	 *  6. Replace the form of g[] in evaluateG() by the form like "g = grad(WL()) + grad(BinDensity())"
-	 *  7. Set the initial vector x in main(), set step size, set #iteration, and call the solver like above example
-	 * */
 
     no.setX(coordinate);    // set solution
-    no.setNumIteration(1000); // user-specified parameter
-    no.setStepSizeBound(30); // user-specified parameter
-    for(int j=0; j<5; ++j){
-        no.solve(); // Conjugate Gradient solver
-        for (size_t i = 0; i < _placement.numModules(); ++i ){
-            coordinate[ 2 * i ] = no.x(2 * i);
-            coordinate[2 * i+1] = no.x(2 * i + 1);
-            _placement.module(i).setPosition( coordinate[2*i], coordinate[2*i+1] );
-        }
-        no.setX(coordinate);
-    }
+    no.setNumIteration(200000000/this->_placement.numModules()); // user-specified parameter
+    no.setStepSizeBound(13); // user-specified parameter
+    for(int j=0; j<10; ++j){
 
-    for(unsigned i=0; i<_placement.numModules(); ++i){
-        _placement.module(i).setPosition( coordinate[2*i], coordinate[2*i+1] );
+        no.solve(); // Conjugate Gradient solver
+        for(size_t i=0; i<_placement.numModules(); ++i){
+            double x = no.x(2 * i);
+            double y = no.x(2 * i + 1);
+            if( !_placement.module(i).isFixed() ){
+                double width  = _placement.module(i).width();
+                double height = _placement.module(i).height();
+                if(x + width  > _placement.boundryRight() ) x = _placement.boundryRight() - width;
+                if(x - width  < _placement.boundryLeft()  ) x = _placement.boundryLeft();
+                if(y + height > _placement.boundryTop()   ) y = _placement.boundryTop() - height;
+                if(y - height < _placement.boundryBottom()) y = _placement.boundryBottom();
+            }else{
+                x = _placement.module(i).x();
+                y = _placement.module(i).y();
+            }
+            _placement.module(i).setPosition( x, y );
+            coordinate[2*i] = x;
+            coordinate[2*i+1] = y;
+        }
+        no.setNumIteration(1200000/this->_placement.numModules());             // user-specified parameter
+        if( j % 2 ) no.setStepSizeBound( ceil( _placement.boundryRight() - _placement.boundryLeft() )   / 100 );  // user-specified parameter
+        else        no.setStepSizeBound( ceil( _placement.boundryTop()   - _placement.boundryBottom() ) / 100 );  // user-specified parameter
+
+        
+        no.setX(coordinate);
+        ef.addlambda();
     }
-    // cout << "Current solution:" << endl;
-    // for (unsigned i = 0; i < no.dimension(); i++) {
-    //     cout << "x[" << i << "] = " << no.x(i) << endl;
-    // }
-    // cout << "Objective: " << no.objective() << endl;
-	
 }
 
 
