@@ -1,13 +1,11 @@
 --How to Compile
 In this directory, enter the following command:
 $ make
-or
-$ make all
-It will generate the executable file " route " in ../bin/ 
+It will generate the executable file " hw3 " in ../bin/ 
 If you want to remove it please enter the following command
 $ make clean
 
 --How to Run
-Usage: ./<exe> <input_file_name> <output_file_name>
+Usage: ./<exe> <blocks> <nets> <pls> <output file name>
 e.g.:
-../bin/route ../testcase/ibm01.modified.txt ./a.out
+../bin/hw3 ../testcase/n100.hardblocks ../testcase/n100.nets ../testcase/n100.pl n100.floorplan 0.1
