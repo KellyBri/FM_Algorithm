@@ -3,11 +3,14 @@
 #include "BIN.h"
 #include "NET.h"
 #include <cstring>
+#include <queue>
+
 
 
 class GLOBALROUTE{
 public:
 	GLOBALROUTE(int, int, int, int);
+	~GLOBALROUTE();
 	void addNet(NET);
 	void route();
 
@@ -19,14 +22,15 @@ private:
 	const int verticalCap, horizontalCap;
 	int netNum;
 	std::vector<NET> nets;
-
-	// horizontal:horizontal capacity, vertical: vertical capacuty
-	// current: label of current net being route
+	enum{ HORIZONTAL, VERTICAL };
 	std::vector< std::vector<BIN *> > bins;
-	int **curLabel;
-
+	
 	void phase1();
-	void clearGrid(int **);
+	void phase2();
+	void ripoff(int);
+	void reRoute(int);
+	void clearLabel();
+	void printOverflow();
 };
 
 #endif

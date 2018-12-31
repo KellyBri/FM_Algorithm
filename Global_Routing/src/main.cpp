@@ -18,7 +18,7 @@ int main(int argc, char const **argv){
 	//read file
 	std::cout<<"Start to read file!\n";
 	std::ifstream netFile(netFilename, std::ios::in);
-	netFile >> text >> gridyNum >> gridxNum;
+	netFile >> text >> gridxNum >> gridyNum;
 	netFile >> text >> text >> verticalCap;
 	netFile >> text >> text >> horizontalCap;
 	netFile >> text >> text >> netNum;
@@ -26,6 +26,7 @@ int main(int argc, char const **argv){
 	// std::cout<<"vertical = "<<verticalCap<<"\thorizontal = "<<horizontalCap<<std::endl;
 	// std::cout<<"num net = "<<netNum<<std::endl;
 	GLOBALROUTE globalRoute(gridxNum, gridyNum, verticalCap, horizontalCap);
+	// GLOBALROUTE globalRoute(gridyNum, gridxNum, verticalCap, horizontalCap);
 
 	for(int i=0; i<netNum; ++i){
 		

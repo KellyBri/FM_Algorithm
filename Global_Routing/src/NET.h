@@ -5,8 +5,17 @@
 
 class NET{
 public:
-
 	NET(int, std::string);
+
+
+	int getOverflow();
+	void subOverflow(int);
+	void addOverflow(int);
+
+	float getCongestion();
+	void addCongestion(float);
+	void subCongestion(float);
+
 	void addPin (int, int);
 	void addPath(int, int);
 	void ripoff();
@@ -20,16 +29,20 @@ public:
 	int getPathNum();
 
 	int getID();
+	
 	std::string getName();
-
+	
 
 private:
-	const int id;
-	const std::string name;
+	int id;
+	std::string name;
 
 	int pinNum, pathNum;
 	std::vector<int> pinX,  pinY;
 	std::vector<int> pathX, pathY;
+
+	int overflow;
+	float congestion;
 };
 
 #endif
