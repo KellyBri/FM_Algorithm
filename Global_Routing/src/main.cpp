@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <cstring>
+#include <cstdlib>
 
 #include "GLOBALROUTE.h"
 #include "NET.h"
@@ -16,7 +17,7 @@ int main(int argc, char const **argv){
 	std::string text;
 
 	//read file
-	std::cout<<"Start to read file!\n";
+	// std::cout<<"Start to read file!\n";
 	std::ifstream netFile(netFilename, std::ios::in);
 	netFile >> text >> gridxNum >> gridyNum;
 	netFile >> text >> text >> verticalCap;
@@ -28,42 +29,43 @@ int main(int argc, char const **argv){
 	GLOBALROUTE globalRoute(gridxNum, gridyNum, verticalCap, horizontalCap);
 	// GLOBALROUTE globalRoute(gridyNum, gridxNum, verticalCap, horizontalCap);
 
+	int max = 0,a = 0;
 	for(int i=0; i<netNum; ++i){
 		
 		int netID, pinNum, x, y;
 		std::string netName;
 		netFile >> netName >> netID >> pinNum;
-		NET net(netID, netName);
+		NET* net = new NET(netID, netName);
 		// std::cout<<netName<<"\t"<<netID<<"\t"<<pinNum<<std::endl;
 		for(int j=0; j<pinNum; ++j){
 			netFile >> x >> y;
-			net.addPin(x,y);
-			// std::cout<<x<<"\t"<<y<<std::endl;
+			net->addPin(x,y);
 		}
 		globalRoute.addNet(net);
 	}
 	netFile.close();
-	std::cout<<"Success!" << std::endl << std::endl << std::endl;
+	// std::cout<<"Success!" << std::endl << std::endl << std::endl;
 
 	//routing by implementation of Lee algorithm with A*-search
-	std::cout<<"Start to route!\n";
+	// std::cout<<"Start to route!\n";
 	globalRoute.route();
-	std::cout<<"Success!" << std::endl << std::endl << std::endl;
+	// std::cout<<"Success!" << std::endl << std::endl << std::endl;
 
 
 	//write file
-	std::cout<<"Start to write file!\n";
+	// std::cout<<"Start to write file!\n";
 	std::ofstream outputFile(outputFilename, std::ios::out);
 	for(int i=0; i<netNum; ++i){
-		NET net = globalRoute.getNet(i); 
-		outputFile << net.getName() << " " << net.getID() << std::endl;
-		for(int j=0; j<net.getPathNum()-1; ++j){
-			outputFile << "(" << net.getPathX(j)   << "," << net.getPathY(j)   <<",1)-";
-			outputFile << "(" << net.getPathX(j+1) << "," << net.getPathY(j+1) <<",1)" << std::endl;
+		NET* net = globalRoute.getNet(i); 
+		outputFile << net->getName() << " " << net->getID() << std::endl;
+		// std::cout << net->getName() << " " << net->getID() << " " << net->getPathNum()-1 << std::endl;
+		for(int j=0; j<net->getPathNum()-1; ++j){
+			outputFile << "(" << net->getPathX(j)   << "," << net->getPathY(j)   <<",1)-";
+			outputFile << "(" << net->getPathX(j+1) << "," << net->getPathY(j+1) <<",1)" << std::endl;
 		}
 		outputFile << "!\n";
 	}
 	outputFile.close();
-	std::cout<<"Success!\n";
+	// std::cout<<"Success!\n";
 	return 0;
 }

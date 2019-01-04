@@ -9,12 +9,8 @@ public:
 
 
 	int getOverflow();
-	void subOverflow(int);
+	void resetOverflow();
 	void addOverflow(int);
-
-	float getCongestion();
-	void addCongestion(float);
-	void subCongestion(float);
 
 	void addPin (int, int);
 	void addPath(int, int);
@@ -29,6 +25,7 @@ public:
 	int getPathNum();
 
 	int getID();
+	int getBoundBox();
 	
 	std::string getName();
 	
@@ -42,7 +39,6 @@ private:
 	std::vector<int> pathX, pathY;
 
 	int overflow;
-	float congestion;
 };
 
 #endif

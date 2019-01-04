@@ -1,6 +1,7 @@
 #ifndef EDGE_H
 #define EDGE_H
 #include <vector>
+#include <cmath>
 
 class EDGE{
 public:
@@ -10,16 +11,18 @@ public:
 
     int getDemand();
     int getSupply();
-    float getCongestion();
+    int getHistory();
+    double getCongestion();
     void calCongestion();
+    void addHistory();
 
     int getNetNum();
     int getNetID(int);
     bool overflow();
 private:
-    int demand;
+    int demand, history;
     const int supply;
-    float congestion;
+    double congestion;
     std::vector<int> netID; //net pass this edge
 };
 
