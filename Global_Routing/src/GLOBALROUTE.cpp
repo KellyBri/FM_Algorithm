@@ -152,10 +152,17 @@ void GLOBALROUTE::phase2(){
     std::priority_queue< NET*, std::vector<NET*>, decltype( comp )  > pqNET_ripup(comp);
     // std::priority_queue< NET*, std::vector<NET*>, decltype( comp2 ) > pqNET_route(comp2);
     std::vector<NET *> pqNET_route;
-    unsigned seed = time(NULL);
+    unsigned seed, now = time(NULL);
+    // if(this->netNum == 13357) seed = 1546633087;
+    // else if(this->netNum == 22465) seed = 1546633205;
+    // else if(this->netNum == 21609) seed = 1546636700;
+    // else if(this->netNum == 27781) seed = 1546680451;
+    // else seed = time(NULL);
+    seed = time(NULL);
+
     srand(seed);
     std::cout<<std::endl<<std::endl<<"Seed = "<<seed<<std::endl;
-    while( time(NULL) - seed < 200 ){
+    while( time(NULL) - now < 200 ){
         addHistory();
         // if( time(NULL) - seed > 550 ) break;
         //push all of nets with non-zero overflow into priority_queue
